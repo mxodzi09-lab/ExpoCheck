@@ -1,0 +1,37 @@
+{
+  "checked_at": "2026-07-28",
+  "products": [
+    {
+      "catalog_number": "100630301",
+      "name": "Deska tarasowa kompozytowa Natural 21x135x2200 mm Teak DLH",
+      "price": 49.97,
+      "unit": "zł/szt.",
+      "discount_percent": 16,
+      "lowest_30_days": 59.97,
+      "savings": 10.00,
+      "url": "https://komfort.pl/p/deska-tarasowa-kompozytowa-natural-21x135x2200-mm-teak-dlh-100630301"
+    },
+    {
+      "catalog_number": "100246460",
+      "name": "Deska Barlinecka Dąb Salt jodełka francuska olej OXY",
+      "price": 349.00,
+      "installation_price": 306.44,
+      "unit": "zł/m²",
+      "discount_percent": 22,
+      "lowest_30_days": 449.99,
+      "savings": 100.99,
+      "url": "https://komfort.pl/p/dab-salt-jodla-francuska-deska-barlinecka-100246460"
+    },
+    {
+      "catalog_number": "100159819",
+      "name": "Wykładzina dywanowa Sweet perłowy 4 m",
+      "price": 99.97,
+      "installation_price": 87.78,
+      "unit": "zł/m²",
+      "discount_percent": 28,
+      "lowest_30_days": 139.00,
+      "savings": 39.03,
+      "url": "https://komfort.pl/p/sweet-perlowy-100159819"
+    }
+  ]
+}
