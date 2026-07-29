@@ -372,7 +372,7 @@ private fun HomeScreen(
                     color = PremiumInk,
                 )
                 Text(
-                    "Zeskanuj cenówkę. Resztę aplikacja zrobi sama.",
+                    "Skieruj aparat na duże cyfry ceny. Mały tekst zostanie pominięty.",
                     color = PremiumMuted,
                 )
             }
@@ -390,7 +390,7 @@ private fun HomeScreen(
                         PremiumStepHeader(
                             currentStep = 1,
                             title = "Nowe sprawdzenie",
-                            subtitle = "Kod produktu → porównanie cen → zapis.",
+                            subtitle = "Duża cena → potwierdzenie → zapis.",
                         )
 
                         StepDots(currentStep = 1)
@@ -402,7 +402,7 @@ private fun HomeScreen(
                         ) {
                             Icon(Icons.Default.QrCodeScanner, contentDescription = null)
                             Text(
-                                "  Uruchom skaner",
+                                "  Skanuj dużą cenę",
                                 fontWeight = FontWeight.SemiBold,
                             )
                         }
@@ -749,12 +749,18 @@ private fun ReviewScreen(
     val context = LocalContext.current
     val store = remember { RecordStore(context) }
     val matches = PriceParser.pricesMatch(page, label)
+    val scannedPrices = PriceParser.detectedPrices(label)
+    val labelOnlyMode =
+        page.currentPrice == null &&
+            scannedPrices.isNotEmpty()
+
     var status by remember {
         mutableStateOf(
-            when (matches) {
-                true -> CheckStatus.DONE
-                false -> CheckStatus.WRONG_PRICE
-                null -> CheckStatus.TO_CHECK
+            when {
+                labelOnlyMode -> CheckStatus.DONE
+                matches == true -> CheckStatus.DONE
+                matches == false -> CheckStatus.WRONG_PRICE
+                else -> CheckStatus.TO_CHECK
             }
         )
     }
@@ -978,10 +984,15 @@ private fun ResultHero(
         null -> PremiumAmber
     }
     val background = accent.copy(alpha = 0.09f)
-    val headline = when (matches) {
-        true -> "Cena prawidłowa"
-        false -> "Wykryto niezgodność"
-        null -> "Wymaga sprawdzenia"
+    val labelOnly =
+        page.currentPrice == null &&
+            PriceParser.detectedPrices(label).isNotEmpty()
+
+    val headline = when {
+        labelOnly -> "Cena odczytana"
+        matches == true -> "Cena prawidłowa"
+        matches == false -> "Wykryto niezgodność"
+        else -> "Wymaga sprawdzenia"
     }
     val comparisons = PriceParser.comparePrices(page, label)
     val shelfPrices = PriceParser.detectedPrices(label)

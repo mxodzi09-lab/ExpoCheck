@@ -233,129 +233,294 @@ object PriceParser {
         return mergeCandidates(candidates)
     }
 
-    private fun extractSpatialPrices(tokens: List<OcrToken>): List<PriceCandidate> {
-        if (tokens.isEmpty()) return emptyList()
+/**
+ * Tryb cenówki: bierzemy wyłącznie największe cyfry widoczne w kadrze.
+ *
+ * Przykłady:
+ * - 1111 + małe 92 => 1111,92 zł/szt.
+ * - 777 + małe 36  => 777,36 zł/szt.
+ *
+ * Małe liczby z opisu, daty, EAN, procenty i kody są odrzucane.
+ */
+private fun extractSpatialPrices(
+    tokens: List<OcrToken>,
+): List<PriceCandidate> {
+    if (tokens.isEmpty()) return emptyList()
 
-        val clean = tokens.mapNotNull { token ->
-            val value = token.text.trim()
-            if (value.isBlank()) null else token.copy(text = value)
-        }
-        if (clean.isEmpty()) return emptyList()
-
-        val medianHeight = clean.map { it.height }.sorted().let { heights ->
-            heights.getOrElse(heights.size / 2) { 1 }
-        }.coerceAtLeast(1)
-
-        val unitTokens = clean.filter {
-            val value = normalizeText(it.text).replace(" ", "")
-            value.contains("zl") || value.contains("m2") || value.contains("szt") ||
-                value.contains("mb") || value.contains("opak")
-        }
-
-        val found = mutableListOf<PriceCandidate>()
-        val pairedPriceTokens = mutableSetOf<String>()
-        fun tokenKey(token: OcrToken): String =
-            "${token.left}:${token.top}:${token.right}:${token.bottom}:${token.text}"
-
-        // Cena zapisana w jednym elemencie OCR, np. 338,67.
-        clean.forEach { token ->
-            val match = Regex("(?<!\\d)(\\d{1,4})[,.](\\d{2})(?!\\d)").find(token.text)
-                ?: return@forEach
-            val value = "${match.groupValues[1]}.${match.groupValues[2]}".toDoubleOrNull()
-                ?: return@forEach
-            val nearbyUnit = nearestUnit(token, unitTokens) ?: return@forEach
-            val sizeScore = token.height * 14.0 + token.width * 0.35
-            found += PriceCandidate(
-                value = value,
-                unit = normalizeUnit(nearbyUnit.text),
-                start = token.top,
-                source = token.text,
-                confidence = sizeScore + 3_200.0,
-            )
-        }
-
-        // Cena rozbita na duże złote i podniesione grosze: „338” + „67”.
-        val wholeTokens = clean.filter { it.text.trim().matches(Regex("\\d{1,4}")) }
-        val centsTokens = clean.filter { it.text.trim().matches(Regex("\\d{2}\\s*[*¹²³…]*")) }
-
-        for (whole in wholeTokens) {
-            val wholeDigits = tokenDigits(whole.text)
-            val wholeValue = wholeDigits.toIntOrNull() ?: continue
-            if (wholeValue > 9_999) continue
-
-            for (cents in centsTokens) {
-                if (tokenKey(whole) == tokenKey(cents)) continue
-                val centsDigits = tokenDigits(cents.text)
-                val centsValue = centsDigits.toIntOrNull() ?: continue
-
-                val horizontalGap = cents.left - whole.right
-                val centerDelta = abs(whole.centerY - cents.centerY)
-                val centsHeightRatio = cents.height / whole.height.toDouble()
-                val maxGap = max(whole.height * 1.35, 145.0)
-
-                // Grosze muszą naprawdę leżeć po prawej stronie dużych złotych.
-                // Dzięki temu 529 nie łączy się z 67 z innej linii.
-                val geometryOk =
-                    horizontalGap >= -whole.width * 0.03 &&
-                    horizontalGap <= maxGap &&
-                    centerDelta <= whole.height * 0.65 &&
-                    centsHeightRatio in 0.22..1.15
-                if (!geometryOk) continue
-
-                val value = wholeValue + centsValue / 100.0
-                if (value !in 0.01..99_999.99) continue
-
-                val combined = OcrToken(
-                    text = "${wholeDigits},${centsDigits}",
-                    left = minOf(whole.left, cents.left),
-                    top = minOf(whole.top, cents.top),
-                    right = maxOf(whole.right, cents.right),
-                    bottom = maxOf(whole.bottom, cents.bottom),
-                )
-                val nearbyUnit = nearestUnit(combined, unitTokens) ?: continue
-                val hasStar = cents.text.any { it == '*' || it in "¹²³…" }
-                val sizeScore = whole.height * 15.0 + whole.width * 0.42 + cents.height * 4.0
-                val closeness = max(0.0, 900.0 - abs(horizontalGap) * 3.0 - centerDelta * 1.5)
-                val starBonus = if (hasStar) 220.0 else 0.0
-
-                found += PriceCandidate(
-                    value = value,
-                    unit = normalizeUnit(nearbyUnit.text),
-                    start = combined.top,
-                    source = combined.text,
-                    confidence = sizeScore + closeness + 3_500.0 + starBonus,
-                )
-                pairedPriceTokens += tokenKey(whole)
-                pairedPriceTokens += tokenKey(cents)
-            }
-        }
-
-        // Cena pełnozłotowa, np. przekreślone „529 zł/szt.”.
-        // Dodajemy ją tylko wtedy, gdy obok jest jednostka i token nie został już
-        // wykorzystany jako część ceny 338,67.
-        for (whole in wholeTokens) {
-            if (tokenKey(whole) in pairedPriceTokens) continue
-            val wholeDigits = tokenDigits(whole.text)
-            val value = wholeDigits.toDoubleOrNull() ?: continue
-            if (value !in 1.0..99_999.0) continue
-            if (whole.height < medianHeight * 0.85) continue
-
-            val nearbyUnit = nearestUnit(whole, unitTokens) ?: continue
-            found += PriceCandidate(
-                value = value,
-                unit = normalizeUnit(nearbyUnit.text),
-                start = whole.top,
-                source = whole.text,
-                confidence = whole.height * 13.0 + whole.width * 0.35 + 3_000.0,
-            )
-        }
-
-        return mergeCandidates(found)
-            .filter { it.unit.isNotBlank() }
-            .sortedByDescending { it.confidence }
-            .take(4)
-            .sortedBy { it.start }
+    val clean = tokens.mapNotNull { token ->
+        val value = token.text.trim()
+        if (value.isBlank()) null else token.copy(text = value)
     }
+    if (clean.isEmpty()) return emptyList()
+
+    val heights = clean.map { it.height }.sorted()
+    val medianHeight = heights
+        .getOrElse(heights.size / 2) { 1 }
+        .coerceAtLeast(1)
+
+    val unitTokens = clean.filter {
+        val value = normalizeText(it.text).replace(" ", "")
+        value.contains("zl") ||
+            value.contains("m2") ||
+            value.contains("szt") ||
+            value.contains("mb") ||
+            value.contains("opak")
+    }
+
+    val numericTokens = clean.filter { token ->
+        val digits = tokenDigits(token.text)
+        digits.length in 1..4 &&
+            token.text.all {
+                it.isDigit() ||
+                    it.isWhitespace() ||
+                    it == '.' ||
+                    it == ','
+            }
+    }
+
+    if (numericTokens.isEmpty()) return emptyList()
+
+    val wholeTokens = mergeAdjacentWholeTokens(numericTokens)
+    val maxWholeHeight = wholeTokens
+        .maxOfOrNull { it.height }
+        ?.coerceAtLeast(1)
+        ?: return emptyList()
+
+    // Tylko naprawdę duży druk. Dolny próg zależy zarówno od typowego
+    // tekstu na etykiecie, jak i od największej cyfry w aktualnym kadrze.
+    val largeHeightThreshold = max(
+        medianHeight * 1.55,
+        maxWholeHeight * 0.43,
+    )
+
+    val largeWholes = wholeTokens.filter {
+        it.height >= largeHeightThreshold
+    }
+
+    val centsTokens = clean.filter {
+        val digits = tokenDigits(it.text)
+        digits.length == 2 &&
+            it.text.all { char ->
+                char.isDigit() ||
+                    char.isWhitespace() ||
+                    char == '*' ||
+                    char in "¹²³…"
+            }
+    }
+
+    val found = mutableListOf<PriceCandidate>()
+    val pairedWholeKeys = mutableSetOf<String>()
+
+    fun key(token: OcrToken): String =
+        "${token.left}:${token.top}:${token.right}:${token.bottom}:${token.text}"
+
+    // Jedno pole OCR: np. „1111,92”.
+    clean.forEach { token ->
+        val match = Regex(
+            "(?<!\\d)(\\d{1,4})[,.](\\d{2})(?!\\d)"
+        ).find(token.text) ?: return@forEach
+
+        if (token.height < largeHeightThreshold * 0.72) {
+            return@forEach
+        }
+
+        val value =
+            "${match.groupValues[1]}.${match.groupValues[2]}"
+                .toDoubleOrNull()
+                ?: return@forEach
+        val unit = nearestUnit(token, unitTokens) ?: return@forEach
+
+        found += PriceCandidate(
+            value = value,
+            unit = normalizeUnit(unit.text),
+            start = token.top,
+            source = token.text,
+            confidence =
+                token.height * 22.0 +
+                token.width * 0.45 +
+                7_000.0,
+        )
+    }
+
+    // Duże złote + mniejsze grosze po prawej stronie.
+    for (whole in largeWholes) {
+        val wholeDigits = tokenDigits(whole.text)
+        val wholeValue = wholeDigits.toIntOrNull() ?: continue
+        if (wholeValue !in 1..9_999) continue
+
+        val matches = centsTokens.mapNotNull { cents ->
+            val centsDigits = tokenDigits(cents.text)
+            val centsValue = centsDigits.toIntOrNull()
+                ?: return@mapNotNull null
+
+            val horizontalGap = cents.left - whole.right
+            val centerDelta = abs(whole.centerY - cents.centerY)
+            val centsRatio = cents.height / whole.height.toDouble()
+            val maxGap = max(whole.height * 1.45, 170.0)
+
+            val geometryOk =
+                horizontalGap >= -whole.width * 0.04 &&
+                horizontalGap <= maxGap &&
+                centerDelta <= whole.height * 0.62 &&
+                centsRatio in 0.20..0.82
+
+            if (!geometryOk) return@mapNotNull null
+
+            val combined = OcrToken(
+                text = "$wholeDigits,$centsDigits",
+                left = minOf(whole.left, cents.left),
+                top = minOf(whole.top, cents.top),
+                right = maxOf(whole.right, cents.right),
+                bottom = maxOf(whole.bottom, cents.bottom),
+            )
+            val unit = nearestUnit(combined, unitTokens)
+                ?: return@mapNotNull null
+
+            val distancePenalty =
+                abs(horizontalGap) * 2.2 +
+                    centerDelta * 1.3
+
+            Triple(centsValue, unit, 2_000.0 - distancePenalty)
+        }
+
+        val best = matches.maxByOrNull { it.third } ?: continue
+        val value = wholeValue + best.first / 100.0
+        if (value !in 0.01..99_999.99) continue
+
+        found += PriceCandidate(
+            value = value,
+            unit = normalizeUnit(best.second.text),
+            start = whole.top,
+            source = whole.text,
+            confidence =
+                whole.height * 24.0 +
+                whole.width * 0.55 +
+                best.third +
+                8_000.0,
+        )
+        pairedWholeKeys += key(whole)
+    }
+
+    // Duża cena bez groszy, ale tylko gdy ma obok jawne „zł/...”.
+    for (whole in largeWholes) {
+        if (key(whole) in pairedWholeKeys) continue
+
+        val digits = tokenDigits(whole.text)
+        val value = digits.toDoubleOrNull() ?: continue
+        if (value !in 1.0..99_999.0) continue
+
+        val unit = nearestUnit(whole, unitTokens) ?: continue
+
+        found += PriceCandidate(
+            value = value,
+            unit = normalizeUnit(unit.text),
+            start = whole.top,
+            source = whole.text,
+            confidence =
+                whole.height * 21.0 +
+                whole.width * 0.45 +
+                6_500.0,
+        )
+    }
+
+    if (found.isEmpty()) return emptyList()
+
+    val bestConfidence = found.maxOf { it.confidence }
+
+    // Zostawiamy maksymalnie trzy dominujące ceny. Kandydat musi być
+    // wizualnie zbliżony do największego druku w kadrze.
+    return mergeCandidates(found)
+        .filter { it.confidence >= bestConfidence * 0.58 }
+        .sortedByDescending { it.confidence }
+        .take(3)
+        .sortedBy { it.start }
+}
+
+/**
+ * OCR potrafi rozbić „1 111” na dwa elementy: „1” i „111”.
+ * Łączymy je, gdy mają podobną wysokość i leżą w tym samym wierszu.
+ * Oryginalne części są wtedy usuwane, aby nie powstała cena 111,92.
+ */
+private fun mergeAdjacentWholeTokens(
+    tokens: List<OcrToken>,
+): List<OcrToken> {
+    if (tokens.isEmpty()) return emptyList()
+
+    val merged = mutableListOf<OcrToken>()
+    val consumed = mutableSetOf<Int>()
+
+    for (leftIndex in tokens.indices) {
+        if (leftIndex in consumed) continue
+        val left = tokens[leftIndex]
+        val leftDigits = tokenDigits(left.text)
+        if (leftDigits.isEmpty()) continue
+
+        val candidate = tokens.indices
+            .asSequence()
+            .filter { it != leftIndex && it !in consumed }
+            .map { rightIndex -> rightIndex to tokens[rightIndex] }
+            .filter { (_, right) ->
+                right.left >= left.right &&
+                    tokenDigits(right.text).isNotEmpty()
+            }
+            .mapNotNull { (rightIndex, right) ->
+                val rightDigits = tokenDigits(right.text)
+                val combinedDigits = leftDigits + rightDigits
+                if (combinedDigits.length !in 2..4) {
+                    return@mapNotNull null
+                }
+
+                val gap = right.left - left.right
+                val centerDelta = abs(left.centerY - right.centerY)
+                val heightRatio =
+                    right.height / left.height.toDouble()
+                val maxGap = max(left.height * 0.42, 70.0)
+
+                val sameLargeRow =
+                    gap in 0.0..maxGap &&
+                        centerDelta <= max(
+                            left.height,
+                            right.height,
+                        ) * 0.28 &&
+                        heightRatio in 0.72..1.38
+
+                if (!sameLargeRow) return@mapNotNull null
+
+                Triple(
+                    rightIndex,
+                    right,
+                    gap + centerDelta,
+                )
+            }
+            .minByOrNull { it.third }
+
+        if (candidate != null) {
+            val rightIndex = candidate.first
+            val right = candidate.second
+            val combinedDigits =
+                leftDigits + tokenDigits(right.text)
+
+            merged += OcrToken(
+                text = combinedDigits,
+                left = left.left,
+                top = minOf(left.top, right.top),
+                right = right.right,
+                bottom = maxOf(left.bottom, right.bottom),
+            )
+            consumed += leftIndex
+            consumed += rightIndex
+        }
+    }
+
+    tokens.indices
+        .filter { it !in consumed }
+        .forEach { merged += tokens[it] }
+
+    return merged
+        .distinctBy {
+            "${it.left}:${it.top}:${it.right}:${it.bottom}:${tokenDigits(it.text)}"
+        }
+}
 
     private fun mergeCandidates(candidates: List<PriceCandidate>): List<PriceCandidate> {
         if (candidates.isEmpty()) return emptyList()

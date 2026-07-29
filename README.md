@@ -1,12 +1,15 @@
-# ExpoCheck v0.5.1
+# ExpoCheck v0.5.2 — skaner dużych cen
 
-## Najważniejsze poprawki
+Ta wersja nie otwiera już strony Komfortu i niczego nie pobiera z internetu.
 
-- po wykryciu numeru produktu aplikacja od razu sprawdza Komfort.pl w tle,
-- najpierw używa szybkiego pobrania strony przez HTTP,
-- niewidoczny WebView działa tylko jako awaryjny plan B,
-- kod produktu jest zatwierdzany po 2 poprawnych klatkach,
-- panel skanera jest znacznie niższy i nie zasłania połowy cenówki,
-- szczegółowe dane są pokazywane dopiero na ekranie zapisu.
+Skaner:
+- wykrywa wyłącznie największe cyfry cenowe,
+- łączy `1` + `111` + `92` w `1111,92`,
+- łączy `777` + `36` w `777,36`,
+- ignoruje małe ceny, daty, EAN, wymiary, procenty i tekst,
+- pokazuje maksymalnie trzy dominujące ceny,
+- zapisuje numer produktu, jeśli uda się go stabilnie odczytać.
 
-Artefakt GitHub Actions: `ExpoCheck-v0.5.1-APK`.
+Panel na dole jest mały i nie zasłania cenówki.
+
+Artefakt GitHub Actions: `ExpoCheck-v0.5.2-APK`.

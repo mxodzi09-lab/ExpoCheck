@@ -144,9 +144,9 @@ fun recognizesCatalogNumberForAutomaticLookup() {
             tokens,
         )
         val values = PriceParser.detectedPrices(label).map { it.value }
-        assertEquals(2, values.size)
+        assertEquals(1, values.size)
         assertTrue(values.any { kotlin.math.abs(it - 338.67) < 0.001 })
-        assertTrue(values.any { kotlin.math.abs(it - 529.0) < 0.001 })
+        assertTrue(values.none { kotlin.math.abs(it - 529.0) < 0.001 })
     }
 
     @Test
@@ -172,6 +172,41 @@ fun doesNotTreatCentsAsSeparateWholePrices() {
     assertTrue(values.any { kotlin.math.abs(it - 169.99) < 0.001 })
     assertTrue(values.none { kotlin.math.abs(it - 26.0) < 0.001 })
     assertTrue(values.none { kotlin.math.abs(it - 99.0) < 0.001 })
+}
+
+
+@Test
+fun readsOnlyDominantLargePrices() {
+    val tokens = listOf(
+        // „1 111” rozbite przez OCR na dwa duże elementy.
+        OcrToken("1", 90, 220, 145, 420),
+        OcrToken("111", 155, 220, 470, 420),
+        OcrToken("92", 480, 245, 575, 345),
+        OcrToken("zł/szt.", 475, 360, 610, 410),
+
+        OcrToken("777", 100, 650, 410, 830),
+        OcrToken("36", 420, 675, 510, 765),
+        OcrToken("zł/szt.", 415, 780, 550, 825),
+
+        // Małe liczby, które mają zostać zignorowane.
+        OcrToken("80", 170, 120, 220, 155),
+        OcrToken("2026", 470, 920, 545, 950),
+        OcrToken("13", 555, 920, 590, 950),
+        OcrToken("100360108", 150, 160, 350, 195),
+    )
+
+    val label = PriceParser.parseLabel(
+        "Kod: 100360108 1 111 92 zł/szt. 777 36 zł/szt.",
+        emptyList(),
+        tokens,
+    )
+    val values = PriceParser.detectedPrices(label).map { it.value }
+
+    assertEquals(2, values.size)
+    assertTrue(values.any { kotlin.math.abs(it - 1111.92) < 0.001 })
+    assertTrue(values.any { kotlin.math.abs(it - 777.36) < 0.001 })
+    assertTrue(values.none { kotlin.math.abs(it - 80.0) < 0.001 })
+    assertTrue(values.none { kotlin.math.abs(it - 2026.0) < 0.001 })
 }
 
 }

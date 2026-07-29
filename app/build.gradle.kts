@@ -12,8 +12,8 @@ android {
         applicationId = "pl.expocheck"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.5.1"
+        versionCode = 10
+        versionName = "0.5.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -72,7 +72,6 @@ dependencies {
     implementation("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
 
     implementation("com.google.code.gson:gson:2.11.0")
-    implementation("org.jsoup:jsoup:1.18.3")
     implementation("io.coil-kt:coil-compose:2.7.0")
     testImplementation("junit:junit:4.13.2")
 }
