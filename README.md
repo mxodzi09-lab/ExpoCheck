@@ -1,16 +1,16 @@
-# ExpoCheck v0.4.1
+# ExpoCheck v0.4.2
 
-Poprawka błędu parsera strony Komfortu.
+Poprawka skanowania cenówek na żywo.
 
-W v0.4 parser mógł uznać cenę „Oszczędzasz” za „najniższą cenę z 30 dni”,
-ponieważ wybierał kwotę po samej odległości. Teraz najpierw wybiera cenę
-występującą po właściwym opisie:
+## Co naprawiono
 
-- Bez montażu
-- Przy zakupie montażu
-- Oszczędzasz
-- Najniższa cena z 30 dni
+- aplikacja nie zbiera już każdej przypadkowej liczby z kolejnych klatek,
+- cena musi zostać odczytana stabilnie w co najmniej dwóch klatkach,
+- po pobraniu strony pokazywane są tylko ceny występujące na Komfort.pl,
+- rozbite ceny typu `338` + `67` są łączone tylko wtedy, gdy leżą obok siebie i mają własną jednostkę,
+- pełna cena `529 zł/szt.` jest odczytywana jako `529,00 zł/szt.`,
+- numer produktu musi zostać potwierdzony w trzech klatkach,
+- QR może dostarczyć prawidłowy numer katalogowy,
+- porównywana jest także najniższa cena z 30 dni, jeśli występuje na stronie.
 
-Pozostałe funkcje v0.4 pozostają bez zmian:
-automatyczne wykrycie numeru produktu, pobranie cen ze strony i porównanie
-wszystkich cen widocznych na cenówce.
+Dla cenówki produktu 100344378 oczekiwane wartości to `338,67 zł/szt.` oraz `529,00 zł/szt.`.

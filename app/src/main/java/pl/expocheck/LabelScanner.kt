@@ -84,6 +84,10 @@ fun LabelScannerScreen(
     var lookupMessage by remember { mutableStateOf("Skieruj aparat na kod produktu i ceny") }
     var lastEanCandidate by remember { mutableStateOf("") }
     var eanHits by remember { mutableIntStateOf(0) }
+    var priceVotes by remember { mutableStateOf<Map<String, PriceVote>>(emptyMap()) }
+    var catalogCandidate by remember { mutableStateOf("") }
+    var catalogHits by remember { mutableIntStateOf(0) }
+    var acceptedCatalog by remember { mutableStateOf(online.catalogNumber) }
 
     LaunchedEffect(online) {
         if (
@@ -91,6 +95,9 @@ fun LabelScannerScreen(
             online.currentPrice != null
         ) {
             resolvedOnline = online
+            if (online.catalogNumber.isNotBlank()) {
+                acceptedCatalog = online.catalogNumber
+            }
         }
     }
 
@@ -106,10 +113,10 @@ fun LabelScannerScreen(
     // Jeśli skaner wykrył kod innego produktu niż aktualnie załadowany,
     // nie porównujemy cen z poprzednim produktem podczas pobierania nowych danych.
     val effectiveOnline = when {
-        scan.catalogNumber.isNotBlank() &&
+        acceptedCatalog.isNotBlank() &&
             resolvedOnline.catalogNumber.isNotBlank() &&
-            scan.catalogNumber != resolvedOnline.catalogNumber ->
-            PageSnapshot(catalogNumber = scan.catalogNumber)
+            acceptedCatalog != resolvedOnline.catalogNumber ->
+            PageSnapshot(catalogNumber = acceptedCatalog)
 
         else -> resolvedOnline
     }
@@ -139,51 +146,75 @@ fun LabelScannerScreen(
                 modifier = Modifier.fillMaxSize(),
                 onScan = { newScan ->
                     val currentExpected = PriceParser.comparablePagePrices(effectiveOnline)
-                    val oldPrices = PriceParser.detectedPrices(scan)
-                    val newPrices = PriceParser.detectedPrices(newScan)
+                    val framePrices = PriceParser.detectedPrices(newScan)
 
-                    // Gdy ceny ze strony są już znane, zachowujemy z poprzednich klatek
-                    // te odczyty, które do nich pasują. Przed pobraniem strony zachowujemy
-                    // wszystkie rozpoznane ceny, aby dwie kwoty mogły pojawić się w różnych klatkach.
-                    val retainedOld = if (currentExpected.isEmpty()) {
-                        oldPrices
+                    priceVotes = updatePriceVotes(priceVotes, framePrices)
+                    val stablePrices = priceVotes.values
+                        .filter { it.hits >= 2 && it.misses <= 2 }
+                        .map { it.price }
+
+                    // Po pobraniu strony pokazujemy wyłącznie ceny, które rzeczywiście
+                    // występują online. Przed pobraniem strony pokazujemy maksymalnie
+                    // trzy stabilne odczyty, a nie wszystkie przypadkowe kombinacje OCR.
+                    val mergedPrices = if (currentExpected.isNotEmpty()) {
+                        (stablePrices + framePrices)
+                            .filter { shelf ->
+                                currentExpected.any { online ->
+                                    abs(online.value - shelf.value) < 0.011
+                                }
+                            }
                     } else {
-                        oldPrices.filter { old ->
-                            currentExpected.any { abs(it.value - old.value) < 0.011 }
-                        }
+                        stablePrices
                     }
-
-                    val mergedPrices = (retainedOld + newPrices)
-                        .filter { it.value in 0.01..99_999.99 }
                         .groupBy { String.format(Locale.US, "%.2f", it.value) }
                         .map { (_, group) ->
                             group.maxByOrNull { if (it.unit.isNotBlank()) 1 else 0 } ?: group.first()
                         }
-                        .take(10)
+                        .sortedBy { it.value }
+                        .take(4)
 
-                    val primary = newScan.price
-                        ?: mergedPrices.firstOrNull()?.value
-                        ?: scan.price
-                    val primaryUnit = newScan.unit.ifBlank {
-                        mergedPrices.firstOrNull()?.unit.orEmpty().ifBlank { scan.unit }
+                    val rawCatalog = newScan.catalogNumber
+                    if (rawCatalog.matches(Regex("100\\d{6}"))) {
+                        if (rawCatalog == catalogCandidate) {
+                            catalogHits += 1
+                        } else {
+                            catalogCandidate = rawCatalog
+                            catalogHits = 1
+                        }
+
+                        // Numer musi pojawić się poprawnie w co najmniej trzech klatkach.
+                        // To chroni przed pomyłkami typu 100344178 zamiast 100344378.
+                        if (catalogHits >= 3 && rawCatalog != acceptedCatalog) {
+                            acceptedCatalog = rawCatalog
+                            resolvedOnline = PageSnapshot(catalogNumber = rawCatalog)
+                            lookupCode = rawCatalog
+                            lookupMessage = "Potwierdzono produkt $rawCatalog — pobieram ceny ze strony…"
+                            priceVotes = emptyMap()
+                        } else if (catalogHits < 3 && acceptedCatalog.isBlank()) {
+                            lookupMessage = "Rozpoznaję kod $rawCatalog (${catalogHits}/3)…"
+                        }
                     }
+
+                    val primary = mergedPrices.firstOrNull()?.value ?: scan.price
+                    val primaryUnit = mergedPrices.firstOrNull()?.unit.orEmpty().ifBlank { scan.unit }
 
                     scan = newScan.copy(
                         price = primary,
                         unit = primaryUnit,
                         prices = mergedPrices,
-                        catalogNumber = newScan.catalogNumber.ifBlank { scan.catalogNumber },
+                        catalogNumber = acceptedCatalog,
                         ean = newScan.ean.ifBlank { scan.ean },
                     )
 
-                    // Numer katalogowy Komfortu 100xxxxxx uruchamia pobieranie od razu.
-                    val catalog = newScan.catalogNumber
+                    // Dopiero potwierdzony numer katalogowy uruchamia pobieranie strony.
+                    val catalog = acceptedCatalog
                     if (
                         catalog.matches(Regex("100\\d{6}")) &&
                         (
                             catalog != resolvedOnline.catalogNumber ||
                             resolvedOnline.currentPrice == null
-                        )
+                        ) &&
+                        lookupCode != catalog
                     ) {
                         lookupCode = catalog
                         lookupMessage = "Rozpoznano produkt $catalog — szukam ceny na stronie…"
@@ -291,7 +322,7 @@ fun LabelScannerScreen(
                     }
 
                     Text(
-                        "Wszystkie ceny odczytane z cenówki",
+                        "Pewne ceny odczytane z cenówki",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -427,6 +458,47 @@ private fun LiveCameraPreview(
             previewView
         },
     )
+}
+
+
+private data class PriceVote(
+    val price: DetectedPrice,
+    val hits: Int,
+    val misses: Int = 0,
+)
+
+private fun updatePriceVotes(
+    previous: Map<String, PriceVote>,
+    framePrices: List<DetectedPrice>,
+): Map<String, PriceVote> {
+    val frameByKey = framePrices
+        .filter { it.value in 0.01..99_999.99 }
+        .associateBy { String.format(Locale.US, "%.2f", it.value) }
+    val result = mutableMapOf<String, PriceVote>()
+
+    previous.forEach { (key, vote) ->
+        val current = frameByKey[key]
+        if (current != null) {
+            result[key] = PriceVote(
+                price = if (current.unit.isNotBlank()) current else vote.price,
+                hits = (vote.hits + 1).coerceAtMost(6),
+                misses = 0,
+            )
+        } else {
+            val misses = vote.misses + 1
+            val hits = (vote.hits - 1).coerceAtLeast(0)
+            if (misses <= 3 && hits > 0) {
+                result[key] = vote.copy(hits = hits, misses = misses)
+            }
+        }
+    }
+
+    frameByKey.forEach { (key, price) ->
+        if (key !in result) {
+            result[key] = PriceVote(price = price, hits = 1)
+        }
+    }
+    return result
 }
 
 private class LabelAnalyzer(

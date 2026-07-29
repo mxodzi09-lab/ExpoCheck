@@ -108,4 +108,54 @@ fun recognizesCatalogNumberForAutomaticLookup() {
     assertEquals(2, PriceParser.detectedPrices(label).size)
 }
 
+    @Test
+    fun parsesWholeLowestPriceFromProductPage() {
+        val body = """
+            Nr kat. 100344378
+            338,67 zł/szt
+            -35%
+            Oszczędzasz 190,33 zł
+            Najniższa cena z 30 dni przed obniżką: 529 zł/szt
+            Cena katalogowa: 625 zł/szt
+        """.trimIndent()
+        val page = PriceParser.parsePage("Bateria Excellent", body, "", "")
+        assertEquals(338.67, page.currentPrice!!, 0.001)
+        assertEquals(529.0, page.lowest30Price!!, 0.001)
+        assertTrue(PriceParser.comparablePagePrices(page).any { it.label == "Najniższa z 30 dni" && kotlin.math.abs(it.value - 529.0) < 0.001 })
+    }
+
+    @Test
+    fun ignoresFalsePriceCombinationsFromOtherLines() {
+        val tokens = listOf(
+            OcrToken("338", 80, 280, 330, 500),
+            OcrToken("67", 342, 295, 440, 405),
+            OcrToken("zł/szt.", 338, 420, 480, 465),
+            OcrToken("529", 455, 250, 565, 320),
+            OcrToken("zł/szt.", 568, 285, 640, 315),
+            // Szum OCR z innych fragmentów cenówki.
+            OcrToken("4", 40, 90, 65, 120),
+            OcrToken("26", 210, 85, 250, 115),
+            OcrToken("29", 455, 120, 500, 150),
+            OcrToken("100344378", 90, 190, 280, 225),
+        )
+        val label = PriceParser.parseLabel(
+            "Kod: 100344378 338 67 zł/szt. 529 zł/szt.",
+            emptyList(),
+            tokens,
+        )
+        val values = PriceParser.detectedPrices(label).map { it.value }
+        assertEquals(2, values.size)
+        assertTrue(values.any { kotlin.math.abs(it - 338.67) < 0.001 })
+        assertTrue(values.any { kotlin.math.abs(it - 529.0) < 0.001 })
+    }
+
+    @Test
+    fun readsCatalogNumberFromQrUrl() {
+        val label = PriceParser.parseLabel(
+            rawText = "Bateria umywalkowa",
+            barcodeValues = listOf("https://komfort.pl/p/bateria-x-100344378"),
+        )
+        assertEquals("100344378", label.catalogNumber)
+    }
+
 }

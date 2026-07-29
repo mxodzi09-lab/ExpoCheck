@@ -196,7 +196,7 @@ private fun createKomfortWebView(
         settings.databaseEnabled = true
         settings.loadWithOverviewMode = true
         settings.useWideViewPort = true
-        settings.userAgentString = settings.userAgentString + " ExpoCheck/0.4"
+        settings.userAgentString = settings.userAgentString + " ExpoCheck/0.4.2"
         webChromeClient = WebChromeClient()
         addJavascriptInterface(PageBridge { payload -> handler.post { onPayload(payload) } }, "ExpoCheckBridge")
         webViewClient = object : WebViewClient() {

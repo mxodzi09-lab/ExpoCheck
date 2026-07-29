@@ -21,6 +21,13 @@ object PriceParser {
         "(?i)(?<!\\d)(\\d{1,4})[ \\t\\r\\n]+(\\d{2})\\s*[*¹²³…]*\\s*(?:zł)?(?:\\s*/\\s*(m²|m2|mb|szt\\.?|opak\\.?|op\\.?))?(?!\\d)"
     )
 
+    // Pełne złote bez groszy, np. 529 zł/szt. Wymagamy jawnego „zł”,
+    // dzięki czemu numery katalogowe i procenty nie są traktowane jako ceny.
+    private val wholePriceRegex = Regex(
+        "(?i)(?<![\\d,.])(\\d{1,4}(?:[ .]\\d{3})*)(?![\\d,.])\\s*zł(?:\\s*/\\s*(m²|m2|mb|szt\\.?|opak\\.?|op\\.?))?"
+    )
+
+
     fun parsePageJson(payload: String): PageSnapshot {
         val json = JSONObject(payload)
         return parsePage(
@@ -79,11 +86,25 @@ object PriceParser {
         val text = rawText.replace('\u00A0', ' ').replace(Regex("[ \\t]+"), " ")
 
         val spatialCandidates = extractSpatialPrices(ocrTokens)
-        val textCandidates = extractTextCandidates(text)
+        // Gdy mamy współrzędne OCR, nie łączymy luźnych fragmentów tekstu
+        // w ceny. To właśnie tworzyło fałszywe 4,26 / 29,67 / 529,67.
+        val textCandidates = if (ocrTokens.isEmpty()) {
+            extractTextCandidates(text = text, allowSplitPrices = true)
+        } else {
+            emptyList()
+        }
         val allCandidates = mergeCandidates(spatialCandidates + textCandidates)
         val preferred = chooseLabelPrice(text, allCandidates) ?: allCandidates.firstOrNull()
 
-        val catalog = catalogRegex.find(text)?.groupValues?.getOrNull(1)
+        val barcodeCatalog = barcodeValues.firstNotNullOfOrNull { value ->
+            catalogRegex.find(value)?.groupValues?.getOrNull(1)
+                ?: Regex("(?<!\\d)(100\\d{6})(?!\\d)")
+                    .find(value)
+                    ?.groupValues
+                    ?.getOrNull(1)
+        }
+        val catalog = barcodeCatalog
+            ?: catalogRegex.find(text)?.groupValues?.getOrNull(1)
             ?: Regex("(?<!\\d)(100\\d{6})(?!\\d)").find(text)?.groupValues?.getOrNull(1).orEmpty()
         val ean = barcodeValues.firstOrNull { it.length in 8..14 && it.all(Char::isDigit) }
             ?: eanRegex.find(text)?.groupValues?.getOrNull(1).orEmpty()
@@ -116,6 +137,9 @@ object PriceParser {
         page.installationPrice?.let {
             result += ComparablePagePrice("Z montażem", it, page.unit)
         }
+        page.lowest30Price?.let {
+            result += ComparablePagePrice("Najniższa z 30 dni", it, page.unit)
+        }
         return result.distinctBy { "${it.label}:${priceKey(it.value, it.unit)}" }
     }
 
@@ -138,7 +162,10 @@ object PriceParser {
 
     fun money(value: Double?): String = value?.let { String.format(Locale("pl", "PL"), "%.2f", it) } ?: "—"
 
-    private fun extractTextCandidates(text: String): List<PriceCandidate> {
+    private fun extractTextCandidates(
+        text: String,
+        allowSplitPrices: Boolean = true,
+    ): List<PriceCandidate> {
         val candidates = mutableListOf<PriceCandidate>()
 
         priceRegex.findAll(text).forEach { match ->
@@ -154,19 +181,38 @@ object PriceParser {
             )
         }
 
-        splitPriceRegex.findAll(text).forEach { match ->
-            val whole = match.groupValues[1]
-            val cents = match.groupValues[2]
-            val value = "$whole.$cents".toDoubleOrNull() ?: return@forEach
-            val unit = match.groupValues.getOrNull(3).orEmpty()
+        wholePriceRegex.findAll(text).forEach { match ->
+            val value = match.groupValues[1]
+                .replace(" ", "")
+                .replace(".", "")
+                .toDoubleOrNull()
+                ?: return@forEach
+            val unit = match.groupValues.getOrNull(2).orEmpty()
                 .ifBlank { findNearbyUnit(text, match.range.last + 1) }
             candidates += PriceCandidate(
                 value = value,
                 unit = normalizeUnit(unit),
                 start = match.range.first,
                 source = match.value,
-                confidence = 4_600.0,
+                confidence = 4_900.0,
             )
+        }
+
+        if (allowSplitPrices) {
+            splitPriceRegex.findAll(text).forEach { match ->
+                val whole = match.groupValues[1]
+                val cents = match.groupValues[2]
+                val value = "$whole.$cents".toDoubleOrNull() ?: return@forEach
+                val unit = match.groupValues.getOrNull(3).orEmpty()
+                    .ifBlank { findNearbyUnit(text, match.range.last + 1) }
+                candidates += PriceCandidate(
+                    value = value,
+                    unit = normalizeUnit(unit),
+                    start = match.range.first,
+                    source = match.value,
+                    confidence = 4_600.0,
+                )
+            }
         }
 
         return mergeCandidates(candidates)
@@ -187,28 +233,33 @@ object PriceParser {
 
         val unitTokens = clean.filter {
             val value = normalizeText(it.text).replace(" ", "")
-            value.contains("zl") || value.contains("m2") || value.contains("szt") || value.contains("mb")
+            value.contains("zl") || value.contains("m2") || value.contains("szt") ||
+                value.contains("mb") || value.contains("opak")
         }
 
         val found = mutableListOf<PriceCandidate>()
+        val pairedPriceTokens = mutableSetOf<String>()
+        fun tokenKey(token: OcrToken): String =
+            "${token.left}:${token.top}:${token.right}:${token.bottom}:${token.text}"
 
-        // Cena zapisana w jednym elemencie OCR, np. 169,99.
+        // Cena zapisana w jednym elemencie OCR, np. 338,67.
         clean.forEach { token ->
-            val match = Regex("(?<!\\d)(\\d{1,4})[,.](\\d{2})(?!\\d)").find(token.text) ?: return@forEach
-            val value = "${match.groupValues[1]}.${match.groupValues[2]}".toDoubleOrNull() ?: return@forEach
-            val nearbyUnit = nearestUnit(token, unitTokens)
+            val match = Regex("(?<!\\d)(\\d{1,4})[,.](\\d{2})(?!\\d)").find(token.text)
+                ?: return@forEach
+            val value = "${match.groupValues[1]}.${match.groupValues[2]}".toDoubleOrNull()
+                ?: return@forEach
+            val nearbyUnit = nearestUnit(token, unitTokens) ?: return@forEach
             val sizeScore = token.height * 14.0 + token.width * 0.35
-            val unitBonus = if (nearbyUnit != null) 2_800.0 else 0.0
             found += PriceCandidate(
                 value = value,
-                unit = normalizeUnit(nearbyUnit?.text.orEmpty()),
+                unit = normalizeUnit(nearbyUnit.text),
                 start = token.top,
                 source = token.text,
-                confidence = sizeScore + unitBonus,
+                confidence = sizeScore + 3_200.0,
             )
         }
 
-        // Cena rozbita na duże złote i podniesione grosze: „149” + „26*”.
+        // Cena rozbita na duże złote i podniesione grosze: „338” + „67”.
         val wholeTokens = clean.filter { it.text.trim().matches(Regex("\\d{1,4}")) }
         val centsTokens = clean.filter { it.text.trim().matches(Regex("\\d{2}\\s*[*¹²³…]*")) }
 
@@ -218,16 +269,23 @@ object PriceParser {
             if (wholeValue > 9_999) continue
 
             for (cents in centsTokens) {
-                if (whole === cents) continue
+                if (tokenKey(whole) == tokenKey(cents)) continue
                 val centsDigits = tokenDigits(cents.text)
                 val centsValue = centsDigits.toIntOrNull() ?: continue
 
                 val horizontalGap = cents.left - whole.right
-                val verticalOverlap = minOf(whole.bottom, cents.bottom) - maxOf(whole.top, cents.top)
                 val centerDelta = abs(whole.centerY - cents.centerY)
-                val maxGap = max(whole.height * 2.2, 170.0)
-                val verticallyPlausible = verticalOverlap > -whole.height * 0.95 || centerDelta < whole.height * 1.2
-                if (horizontalGap < -whole.width * 0.15 || horizontalGap > maxGap || !verticallyPlausible) continue
+                val centsHeightRatio = cents.height / whole.height.toDouble()
+                val maxGap = max(whole.height * 1.35, 145.0)
+
+                // Grosze muszą naprawdę leżeć po prawej stronie dużych złotych.
+                // Dzięki temu 529 nie łączy się z 67 z innej linii.
+                val geometryOk =
+                    horizontalGap >= -whole.width * 0.03 &&
+                    horizontalGap <= maxGap &&
+                    centerDelta <= whole.height * 0.65 &&
+                    centsHeightRatio in 0.22..1.15
+                if (!geometryOk) continue
 
                 val value = wholeValue + centsValue / 100.0
                 if (value !in 0.01..99_999.99) continue
@@ -239,31 +297,48 @@ object PriceParser {
                     right = maxOf(whole.right, cents.right),
                     bottom = maxOf(whole.bottom, cents.bottom),
                 )
-                val nearbyUnit = nearestUnit(combined, unitTokens)
+                val nearbyUnit = nearestUnit(combined, unitTokens) ?: continue
                 val hasStar = cents.text.any { it == '*' || it in "¹²³…" }
-                val visuallyLarge = whole.height >= medianHeight * 1.25
-
-                // Chroni przed przypadkowym połączeniem fragmentów numeru katalogowego.
-                if (nearbyUnit == null && !hasStar && !visuallyLarge) continue
-
                 val sizeScore = whole.height * 15.0 + whole.width * 0.42 + cents.height * 4.0
-                val closeness = max(0.0, 900.0 - abs(horizontalGap) * 3.0 - centerDelta * 1.2)
-                val unitBonus = if (nearbyUnit != null) 3_400.0 else 0.0
+                val closeness = max(0.0, 900.0 - abs(horizontalGap) * 3.0 - centerDelta * 1.5)
                 val starBonus = if (hasStar) 220.0 else 0.0
 
                 found += PriceCandidate(
                     value = value,
-                    unit = normalizeUnit(nearbyUnit?.text.orEmpty()),
+                    unit = normalizeUnit(nearbyUnit.text),
                     start = combined.top,
                     source = combined.text,
-                    confidence = sizeScore + closeness + unitBonus + starBonus,
+                    confidence = sizeScore + closeness + 3_500.0 + starBonus,
                 )
+                pairedPriceTokens += tokenKey(whole)
+                pairedPriceTokens += tokenKey(cents)
             }
         }
 
+        // Cena pełnozłotowa, np. przekreślone „529 zł/szt.”.
+        // Dodajemy ją tylko wtedy, gdy obok jest jednostka i token nie został już
+        // wykorzystany jako część ceny 338,67.
+        for (whole in wholeTokens) {
+            if (tokenKey(whole) in pairedPriceTokens) continue
+            val wholeDigits = tokenDigits(whole.text)
+            val value = wholeDigits.toDoubleOrNull() ?: continue
+            if (value !in 1.0..99_999.0) continue
+            if (whole.height < medianHeight * 0.85) continue
+
+            val nearbyUnit = nearestUnit(whole, unitTokens) ?: continue
+            found += PriceCandidate(
+                value = value,
+                unit = normalizeUnit(nearbyUnit.text),
+                start = whole.top,
+                source = whole.text,
+                confidence = whole.height * 13.0 + whole.width * 0.35 + 3_000.0,
+            )
+        }
+
         return mergeCandidates(found)
+            .filter { it.unit.isNotBlank() }
             .sortedByDescending { it.confidence }
-            .take(8)
+            .take(4)
             .sortedBy { it.start }
     }
 
@@ -303,21 +378,32 @@ object PriceParser {
 
     private fun nearestUnit(price: OcrToken, units: List<OcrToken>): OcrToken? {
         return units
-            .map { unit ->
-                val dx = when {
+            .mapNotNull { unit ->
+                val horizontalOverlap = minOf(price.right, unit.right) - maxOf(price.left, unit.left)
+                val horizontalGap = when {
                     unit.left > price.right -> unit.left - price.right
                     price.left > unit.right -> price.left - unit.right
                     else -> 0
                 }
-                val dy = when {
+                val verticalGap = when {
                     unit.top > price.bottom -> unit.top - price.bottom
                     price.top > unit.bottom -> price.top - unit.bottom
                     else -> 0
                 }
-                val distance = dx + dy * 1.4
+                val centerDelta = abs(price.centerY - unit.centerY)
+
+                val sameRow =
+                    centerDelta <= max(price.height * 0.85, unit.height * 1.35) &&
+                    horizontalGap <= max(price.height * 2.2, 260.0)
+                val directlyBelow =
+                    unit.top >= price.top &&
+                    verticalGap <= max(price.height * 0.9, 125.0) &&
+                    horizontalOverlap >= -price.width * 0.35
+
+                if (!sameRow && !directlyBelow) return@mapNotNull null
+                val distance = horizontalGap + verticalGap * 1.7 + centerDelta * 0.35
                 unit to distance
             }
-            .filter { (_, distance) -> distance < max(price.height * 4.5, 520.0) }
             .minByOrNull { it.second }
             ?.first
     }
