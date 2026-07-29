@@ -6,12 +6,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,22 +26,25 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +55,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +74,16 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private val PremiumNavy = Color(0xFF0D2B35)
+private val PremiumInk = Color(0xFF13242A)
+private val PremiumMuted = Color(0xFF66767C)
+private val PremiumCanvas = Color(0xFFF7F8F6)
+private val PremiumLine = Color(0xFFE3E7E5)
+private val PremiumGold = Color(0xFFC59B52)
+private val PremiumGreen = Color(0xFF16764B)
+private val PremiumRed = Color(0xFFB63A32)
+private val PremiumAmber = Color(0xFF9A6B16)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -90,7 +104,9 @@ private fun ExpoCheckRoot() {
     val store = remember { RecordStore(context) }
     var nickname by remember { mutableStateOf(store.nickname) }
     var records by remember { mutableStateOf(store.loadRecords()) }
-    var screen by remember { mutableStateOf(if (nickname.isBlank()) Screen.ONBOARDING else Screen.HOME) }
+    var screen by remember {
+        mutableStateOf(if (nickname.isBlank()) Screen.ONBOARDING else Screen.HOME)
+    }
     var browserUrl by remember { mutableStateOf("https://komfort.pl") }
     var browserCode by remember { mutableStateOf("") }
     var pageSnapshot by remember { mutableStateOf(PageSnapshot()) }
@@ -171,43 +187,90 @@ private fun ExpoCheckRoot() {
 }
 
 @Composable
+private fun BrandMark(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.size(50.dp),
+        shape = RoundedCornerShape(17.dp),
+        color = PremiumNavy,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                Icons.Default.Check,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(27.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun NicknameScreen(
     initial: String,
     onSaved: (String) -> Unit,
 ) {
     var value by remember { mutableStateOf(initial) }
+
     Box(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primary).padding(24.dp),
-        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .fillMaxSize()
+            .background(PremiumCanvas)
+            .padding(horizontal = 24.dp, vertical = 34.dp),
     ) {
-        Card(shape = RoundedCornerShape(30.dp)) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                BrandMark()
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "ExpoCheck",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = PremiumInk,
+                    )
+                    Text(
+                        "Proste sprawdzanie cen i ekspozycji.",
+                        color = PremiumMuted,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+
+                Card(
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(1.dp, PremiumLine),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(22.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                    ) {
+                        PremiumStepHeader(
+                            currentStep = 1,
+                            title = "Twój profil",
+                            subtitle = "Nick pojawi się przy zapisanych produktach.",
+                        )
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { value = it.take(24) },
+                            label = { Text("Nick") },
+                            placeholder = { Text("np. Konrad") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                        )
+                    }
+                }
+            }
+
+            Button(
+                onClick = { onSaved(value.trim()) },
+                enabled = value.trim().length >= 2,
+                modifier = Modifier.fillMaxWidth().height(58.dp),
+                shape = RoundedCornerShape(18.dp),
             ) {
-                Surface(
-                    modifier = Modifier.size(58.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                ) {
-                    Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.padding(14.dp))
-                }
-                Text("Witaj w ExpoCheck", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text("Wpisz nick. Będzie zapisywany przy sprawdzonych produktach.")
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = { value = it.take(24) },
-                    label = { Text("Twój nick") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Button(
-                    onClick = { onSaved(value.trim()) },
-                    enabled = value.trim().length >= 2,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Zacznij pracę")
-                }
+                Text("Przejdź dalej", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -224,21 +287,60 @@ private fun HomeScreen(
     onChangeNick: () -> Unit,
 ) {
     val done = records.count { it.status == CheckStatus.DONE }
-    val problems = records.count { it.status in listOf(CheckStatus.WRONG_PRICE, CheckStatus.MISSING_PRICE, CheckStatus.TO_CHECK) }
+    val problems = records.count {
+        it.status in listOf(
+            CheckStatus.WRONG_PRICE,
+            CheckStatus.MISSING_PRICE,
+            CheckStatus.TO_CHECK,
+        )
+    }
 
     Scaffold(
+        containerColor = PremiumCanvas,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("ExpoCheck") },
+                title = {
+                    Text(
+                        "ExpoCheck",
+                        fontWeight = FontWeight.Bold,
+                        color = PremiumInk,
+                    )
+                },
                 actions = {
-                    IconButton(onClick = onChangeNick) {
-                        Icon(Icons.Default.Person, contentDescription = "Zmień nick")
+                    Surface(
+                        modifier = Modifier
+                            .padding(end = 10.dp)
+                            .clickable(onClick = onChangeNick),
+                        shape = RoundedCornerShape(14.dp),
+                        color = Color.White,
+                        border = BorderStroke(1.dp, PremiumLine),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = null,
+                                modifier = Modifier.size(17.dp),
+                                tint = PremiumNavy,
+                            )
+                            Text(
+                                nickname,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = PremiumInk,
+                            )
+                        }
                     }
                 },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = PremiumCanvas,
+                ),
             )
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(containerColor = Color.White) {
                 NavigationBarItem(
                     selected = true,
                     onClick = {},
@@ -255,83 +357,381 @@ private fun HomeScreen(
         },
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                Text("Cześć, $nickname 👋", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Pokaż cenówkę. Kod produktu sam pobierze ceny ze strony Komfortu.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "Dzień dobry, $nickname",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = PremiumInk,
+                )
+                Text(
+                    "Zeskanuj cenówkę. Resztę aplikacja zrobi sama.",
+                    color = PremiumMuted,
+                )
+            }
+
+            item {
+                Card(
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(1.dp, PremiumLine),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                    ) {
+                        PremiumStepHeader(
+                            currentStep = 1,
+                            title = "Nowe sprawdzenie",
+                            subtitle = "Kod produktu → porównanie cen → zapis.",
+                        )
+
+                        StepDots(currentStep = 1)
+
+                        Button(
+                            onClick = onOpenScanner,
+                            modifier = Modifier.fillMaxWidth().height(58.dp),
+                            shape = RoundedCornerShape(18.dp),
+                        ) {
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = null)
+                            Text(
+                                "  Uruchom skaner",
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                }
             }
 
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatCard("Sprawdzone", done.toString(), Icons.Default.CheckCircle, Modifier.weight(1f))
-                    StatCard("Do poprawy", problems.toString(), Icons.Default.ReportProblem, Modifier.weight(1f))
+                    MinimalStatCard(
+                        label = "Zrobione",
+                        value = done.toString(),
+                        icon = Icons.Default.CheckCircle,
+                        accent = PremiumGreen,
+                        modifier = Modifier.weight(1f),
+                    )
+                    MinimalStatCard(
+                        label = "Do poprawy",
+                        value = problems.toString(),
+                        icon = Icons.Default.ReportProblem,
+                        accent = PremiumRed,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
 
             item {
-                Button(onClick = onOpenScanner, modifier = Modifier.fillMaxWidth().height(58.dp)) {
-                    Icon(Icons.Default.QrCodeScanner, contentDescription = null)
-                    Text("  Skanuj cenówkę — ceny pobiorą się same")
+                Text(
+                    "Ostatnia aktywność",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = PremiumInk,
+                )
+            }
+
+            if (records.isEmpty()) {
+                item {
+                    EmptyActivityCard()
+                }
+            } else {
+                items(records.take(3), key = { it.id }) { record ->
+                    RecentRecordCard(record)
                 }
             }
 
             item {
-                Text("Produkty testowe", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Aktualne dane startowe z Komfort.pl — otwarcie strony odświeży cenę.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Produkty testowe",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = PremiumInk,
+                )
+                Text(
+                    "Szybkie otwarcie strony do testów.",
+                    color = PremiumMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
 
             items(SeedProducts.items) { product ->
                 SeedProductCard(product = product, onClick = { onOpenSeed(product) })
             }
 
-            item { Spacer(Modifier.height(10.dp)) }
+            item { Spacer(Modifier.height(18.dp)) }
         }
     }
 }
 
 @Composable
-private fun StatCard(label: String, value: String, icon: ImageVector, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun PremiumStepHeader(
+    currentStep: Int,
+    title: String,
+    subtitle: String,
+) {
+    Row(
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = PremiumNavy,
+        ) {
+            Box(
+                modifier = Modifier.size(38.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    currentStep.toString(),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = PremiumInk,
+            )
+            Text(
+                subtitle,
+                color = PremiumMuted,
+                style = MaterialTheme.typography.bodyMedium,
+            )
         }
     }
 }
 
 @Composable
-private fun SeedProductCard(product: SeedProduct, onClick: () -> Unit) {
+private fun StepDots(currentStep: Int) {
+    val labels = listOf("Produkt", "Ceny", "Zapis")
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        labels.forEachIndexed { index, label ->
+            val active = index + 1 <= currentStep
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(
+                            if (active) PremiumNavy else PremiumLine,
+                            RoundedCornerShape(10.dp),
+                        )
+                )
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (active) PremiumInk else PremiumMuted,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MinimalStatCard(
+    label: String,
+    value: String,
+    icon: ImageVector,
+    accent: Color,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, PremiumLine),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(22.dp),
+            )
+            Text(
+                value,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = PremiumInk,
+            )
+            Text(label, color = PremiumMuted)
+        }
+    }
+}
+
+@Composable
+private fun EmptyActivityCard() {
+    Card(
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, PremiumLine),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                "Jeszcze nic tu nie ma",
+                fontWeight = FontWeight.SemiBold,
+                color = PremiumInk,
+            )
+            Text(
+                "Pierwszy zapisany produkt pojawi się w tym miejscu.",
+                color = PremiumMuted,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecentRecordCard(record: ProductRecord) {
+    val match = PriceParser.pricesMatch(record.page, record.label)
+    val accent = when (match) {
+        true -> PremiumGreen
+        false -> PremiumRed
+        null -> PremiumAmber
+    }
+    val caption = when (match) {
+        true -> "Cena prawidłowa"
+        false -> "Niezgodność ceny"
+        null -> "Do sprawdzenia"
+    }
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, PremiumLine),
+    ) {
+        Row(
+            modifier = Modifier.padding(15.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = accent.copy(alpha = 0.12f),
+            ) {
+                Box(
+                    modifier = Modifier.size(42.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (match == true) Icons.Default.CheckCircle
+                        else Icons.Default.ReportProblem,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    record.page.name.ifBlank { "Produkt" },
+                    fontWeight = FontWeight.SemiBold,
+                    color = PremiumInk,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    "Nr ${record.page.catalogNumber.ifBlank { "—" }}",
+                    color = PremiumMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Text(
+                caption,
+                color = accent,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SeedProductCard(
+    product: SeedProduct,
+    onClick: () -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, PremiumLine),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
-                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.padding(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(13.dp),
+                    color = PremiumNavy.copy(alpha = 0.08f),
+                ) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        tint = PremiumNavy,
+                        modifier = Modifier.padding(10.dp),
+                    )
                 }
-                Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                    Text(product.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                    Text("Nr kat. ${product.catalogNumber}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(
+                    modifier = Modifier.padding(start = 12.dp).weight(1f),
+                ) {
+                    Text(
+                        product.name,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PremiumInk,
+                    )
+                    Text(
+                        "Nr kat. ${product.catalogNumber}",
+                        color = PremiumMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
+
+            HorizontalDivider(color = PremiumLine)
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "${PriceParser.money(product.currentPrice)} ${product.unit}",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
+                    color = PremiumInk,
                     modifier = Modifier.weight(1f),
                 )
                 product.discountPercent?.let {
-                    AssistChip(onClick = {}, label = { Text("-$it%") })
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("-$it%") },
+                    )
                 }
-            }
-            product.installationPrice?.let {
-                Text("Przy zakupie montażu: ${PriceParser.money(it)} ${product.unit}")
             }
         }
     }
@@ -361,87 +761,140 @@ private fun ReviewScreen(
     var note by remember { mutableStateOf("") }
     var photoPath by remember { mutableStateOf("") }
 
-    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) photoPath = runCatching { store.copyPhoto(uri) }.getOrDefault("")
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            photoPath = runCatching { store.copyPhoto(uri) }.getOrDefault("")
+        }
     }
 
     Scaffold(
+        containerColor = PremiumCanvas,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Wynik porównania") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Wróć") }
+                title = {
+                    Text(
+                        "Podsumowanie",
+                        fontWeight = FontWeight.Bold,
+                        color = PremiumInk,
+                    )
                 },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Wróć")
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = PremiumCanvas,
+                ),
             )
         },
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                ResultHero(matches = matches, page = page, label = label)
-            }
-
-            item {
-                Card(shape = RoundedCornerShape(22.dp)) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(page.name.ifBlank { "Produkt Komfort" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("Nr strony: ${page.catalogNumber.ifBlank { "—" }}")
-                        Text("Nr cenówki: ${label.catalogNumber.ifBlank { "—" }}")
-                        if (label.ean.isNotBlank()) Text("EAN: ${label.ean}")
-                        if (page.catalogNumber.isNotBlank() && label.catalogNumber.isNotBlank() && page.catalogNumber != label.catalogNumber) {
-                            Text("Uwaga: numery produktów są różne!", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
-                        }
+                Card(
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(1.dp, PremiumLine),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                    ) {
+                        PremiumStepHeader(
+                            currentStep = 3,
+                            title = "Zapis produktu",
+                            subtitle = "Sprawdź wynik i wybierz status.",
+                        )
+                        StepDots(currentStep = 3)
+                        ResultHero(matches = matches, page = page, label = label)
                     }
                 }
             }
 
             item {
-                Text("Status", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CheckStatus.entries.chunked(2).forEach { rowStatuses ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            rowStatuses.forEach { option ->
-                                val selected = status == option
-                                if (selected) {
-                                    Button(onClick = { status = option }, modifier = Modifier.weight(1f)) { Text(option.label) }
-                                } else {
-                                    OutlinedButton(onClick = { status = option }, modifier = Modifier.weight(1f)) { Text(option.label) }
-                                }
-                            }
-                            if (rowStatuses.size == 1) Spacer(Modifier.weight(1f))
-                        }
+                PremiumSectionCard(title = "Produkt") {
+                    Text(
+                        page.name.ifBlank { "Produkt Komfort" },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = PremiumInk,
+                    )
+                    DetailRow("Numer online", page.catalogNumber.ifBlank { "—" })
+                    DetailRow("Numer cenówki", label.catalogNumber.ifBlank { "—" })
+                    if (label.ean.isNotBlank()) {
+                        DetailRow("EAN", label.ean)
+                    }
+                    if (
+                        page.catalogNumber.isNotBlank() &&
+                        label.catalogNumber.isNotBlank() &&
+                        page.catalogNumber != label.catalogNumber
+                    ) {
+                        Text(
+                            "Numery produktów są różne.",
+                            color = PremiumRed,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
                 }
             }
 
             item {
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it.take(400) },
-                    label = { Text("Notatka") },
-                    placeholder = { Text("np. brakuje czerwonej cenówki promocyjnej") },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                PremiumSectionCard(title = "Status") {
+                    CheckStatus.entries.forEach { option ->
+                        FilterChip(
+                            selected = status == option,
+                            onClick = { status = option },
+                            label = { Text(option.label) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
             }
 
             item {
-                Card(shape = RoundedCornerShape(22.dp)) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Zdjęcie ekspozycji", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        if (photoPath.isNotBlank()) {
-                            AsyncImage(
-                                model = File(photoPath),
-                                contentDescription = "Zdjęcie ekspozycji",
-                                modifier = Modifier.fillMaxWidth().height(220.dp),
-                            )
-                        }
-                        FilledTonalButton(onClick = { photoPicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Default.AddAPhoto, contentDescription = null)
-                            Text(if (photoPath.isBlank()) "  Dodaj zdjęcie" else "  Zmień zdjęcie")
-                        }
+                PremiumSectionCard(title = "Notatka") {
+                    OutlinedTextField(
+                        value = note,
+                        onValueChange = { note = it.take(400) },
+                        placeholder = {
+                            Text("np. brakuje oznaczenia promocji")
+                        },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                    )
+                }
+            }
+
+            item {
+                PremiumSectionCard(title = "Zdjęcie ekspozycji") {
+                    if (photoPath.isNotBlank()) {
+                        AsyncImage(
+                            model = File(photoPath),
+                            contentDescription = "Zdjęcie ekspozycji",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp),
+                        )
+                    }
+                    FilledTonalButton(
+                        onClick = { photoPicker.launch("image/*") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                    ) {
+                        Icon(Icons.Default.AddAPhoto, contentDescription = null)
+                        Text(
+                            if (photoPath.isBlank()) "  Dodaj zdjęcie"
+                            else "  Zmień zdjęcie"
+                        )
                     }
                 }
             }
@@ -461,64 +914,183 @@ private fun ReviewScreen(
                         )
                     },
                     modifier = Modifier.fillMaxWidth().height(58.dp),
+                    shape = RoundedCornerShape(18.dp),
                 ) {
                     Icon(Icons.Default.CheckCircle, contentDescription = null)
-                    Text("  Zapisz produkt")
+                    Text("  Zapisz produkt", fontWeight = FontWeight.SemiBold)
                 }
             }
 
-            item { Spacer(Modifier.height(20.dp)) }
+            item { Spacer(Modifier.height(18.dp)) }
         }
     }
 }
 
 @Composable
-private fun ResultHero(matches: Boolean?, page: PageSnapshot, label: LabelScan) {
-    val color = when (matches) {
-        true -> Color(0xFF177A4A)
-        false -> Color(0xFFB3261E)
-        null -> Color(0xFF7C5A13)
+private fun PremiumSectionCard(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, PremiumLine),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(11.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = PremiumInk,
+            )
+            content()
+        }
     }
-    val background = when (matches) {
-        true -> Color(0xFFE1F5EA)
-        false -> Color(0xFFFFE8E5)
-        null -> Color(0xFFFFF3D5)
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, color = PremiumMuted)
+        Text(
+            value,
+            color = PremiumInk,
+            fontWeight = FontWeight.Medium,
+        )
     }
+}
+
+@Composable
+private fun ResultHero(
+    matches: Boolean?,
+    page: PageSnapshot,
+    label: LabelScan,
+) {
+    val accent = when (matches) {
+        true -> PremiumGreen
+        false -> PremiumRed
+        null -> PremiumAmber
+    }
+    val background = accent.copy(alpha = 0.09f)
     val headline = when (matches) {
-        true -> "Wszystkie ceny prawidłowe"
-        false -> "Nie wszystkie ceny się zgadzają"
+        true -> "Cena prawidłowa"
+        false -> "Wykryto niezgodność"
         null -> "Wymaga sprawdzenia"
     }
     val comparisons = PriceParser.comparePrices(page, label)
     val shelfPrices = PriceParser.detectedPrices(label)
 
-    Card(colors = CardDefaults.cardColors(containerColor = background), shape = RoundedCornerShape(24.dp)) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(headline, color = color, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = background,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                headline,
+                color = accent,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
 
-            Text("Ceny ze strony", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             comparisons.forEach { comparison ->
-                val matched = comparison.matchedLabelPrice != null
-                val marker = if (matched) "✓" else "✕"
-                val rowColor = if (matched) Color(0xFF177A4A) else Color(0xFFB3261E)
-                Text(
-                    "$marker ${comparison.online.label}: ${PriceParser.money(comparison.online.value)} ${comparison.online.unit}",
-                    color = rowColor,
-                    style = MaterialTheme.typography.titleMedium,
+                val matched = comparison.matchedLabelPrice
+                PriceComparisonRow(
+                    title = comparison.online.label,
+                    online = "${PriceParser.money(comparison.online.value)} ${comparison.online.unit}",
+                    shelf = matched?.let {
+                        "${PriceParser.money(it.value)} ${it.unit.ifBlank { comparison.online.unit }}"
+                    } ?: "brak",
+                    matched = matched != null,
                 )
             }
 
-            Text("Ceny odczytane z cenówki", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            if (shelfPrices.isEmpty()) {
-                Text("Nie odczytano żadnej ceny")
-            } else {
-                shelfPrices.forEach { shelf ->
-                    Text("• ${PriceParser.money(shelf.value)} ${shelf.unit.ifBlank { page.unit }}")
-                }
+            if (comparisons.isEmpty() && shelfPrices.isNotEmpty()) {
+                Text(
+                    "Odczytane ceny: " + shelfPrices.joinToString(" • ") {
+                        "${PriceParser.money(it.value)} ${it.unit.ifBlank { page.unit }}"
+                    },
+                    color = PremiumInk,
+                )
             }
 
-            page.discountPercent?.let { Text("Promocja online: -$it%") }
-            page.lowest30Price?.let { Text("Najniższa cena z 30 dni: ${PriceParser.money(it)} ${page.unit}") }
+            page.discountPercent?.let {
+                Text(
+                    "Promocja online: -$it%",
+                    color = PremiumGold,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PriceComparisonRow(
+    title: String,
+    online: String,
+    shelf: String,
+    matched: Boolean,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelLarge,
+            color = PremiumMuted,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            PriceMiniCard(
+                label = "ONLINE",
+                value = online,
+                modifier = Modifier.weight(1f),
+            )
+            PriceMiniCard(
+                label = "CENÓWKA",
+                value = shelf,
+                modifier = Modifier.weight(1f),
+                accent = if (matched) PremiumGreen else PremiumRed,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PriceMiniCard(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    accent: Color = PremiumNavy,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = Color.White.copy(alpha = 0.78f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.20f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = PremiumMuted,
+            )
+            Text(
+                value,
+                fontWeight = FontWeight.Bold,
+                color = accent,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -531,23 +1103,41 @@ private fun HistoryScreen(
     onDelete: (String) -> Unit,
 ) {
     Scaffold(
+        containerColor = PremiumCanvas,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Historia produktów") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Wróć") }
+                title = {
+                    Text(
+                        "Historia",
+                        fontWeight = FontWeight.Bold,
+                        color = PremiumInk,
+                    )
                 },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Wróć")
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = PremiumCanvas,
+                ),
             )
         },
     ) { padding ->
         if (records.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("Nie zapisano jeszcze żadnego produktu.")
+            Box(
+                Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("Nie zapisano jeszcze żadnego produktu.", color = PremiumMuted)
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(11.dp),
             ) {
                 items(records, key = { it.id }) { record ->
                     HistoryCard(record = record, onDelete = { onDelete(record.id) })
@@ -559,33 +1149,71 @@ private fun HistoryScreen(
 }
 
 @Composable
-private fun HistoryCard(record: ProductRecord, onDelete: () -> Unit) {
-    val format = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("pl", "PL")) }
-    Card(shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+private fun HistoryCard(
+    record: ProductRecord,
+    onDelete: () -> Unit,
+) {
+    val format = remember {
+        SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.forLanguageTag("pl-PL"))
+    }
+
+    Card(
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, PremiumLine),
+    ) {
+        Column(
+            modifier = Modifier.padding(15.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
-                    Text(record.page.name.ifBlank { "Produkt" }, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text("Nr kat. ${record.page.catalogNumber.ifBlank { "—" }}")
+                    Text(
+                        record.page.name.ifBlank { "Produkt" },
+                        fontWeight = FontWeight.Bold,
+                        color = PremiumInk,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        "Nr kat. ${record.page.catalogNumber.ifBlank { "—" }}",
+                        color = PremiumMuted,
+                    )
                 }
-                IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Usuń") }
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.Delete, contentDescription = "Usuń")
+                }
             }
+
             PriceParser.comparablePagePrices(record.page).forEach { online ->
-                Text("${online.label}: ${PriceParser.money(online.value)} ${online.unit}")
-            }
-            val recordedShelfPrices = PriceParser.detectedPrices(record.label)
-            if (recordedShelfPrices.isNotEmpty()) {
-                Text(
-                    "Cenówka: " + recordedShelfPrices.joinToString(" • ") {
-                        "${PriceParser.money(it.value)} ${it.unit.ifBlank { record.page.unit }}"
-                    }
+                DetailRow(
+                    online.label,
+                    "${PriceParser.money(online.value)} ${online.unit}",
                 )
-            } else {
-                Text("Cenówka: —")
             }
+
+            val shelfPrices = PriceParser.detectedPrices(record.label)
+            if (shelfPrices.isNotEmpty()) {
+                Text(
+                    "Cenówka: " + shelfPrices.joinToString(" • ") {
+                        "${PriceParser.money(it.value)} ${it.unit.ifBlank { record.page.unit }}"
+                    },
+                    color = PremiumInk,
+                )
+            }
+
             AssistChip(onClick = {}, label = { Text(record.status.label) })
-            Text("${record.nickname} • ${format.format(Date(record.createdAt))}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (record.note.isNotBlank()) Text(record.note)
+
+            Text(
+                "${record.nickname} • ${format.format(Date(record.createdAt))}",
+                color = PremiumMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+
+            if (record.note.isNotBlank()) {
+                Text(record.note, color = PremiumInk)
+            }
+
             if (record.exposurePhotoPath.isNotBlank()) {
                 AsyncImage(
                     model = File(record.exposurePhotoPath),
@@ -600,16 +1228,22 @@ private fun HistoryCard(record: ProductRecord, onDelete: () -> Unit) {
 @Composable
 private fun ExpoCheckTheme(content: @Composable () -> Unit) {
     val colors = androidx.compose.material3.lightColorScheme(
-        primary = Color(0xFF102B36),
+        primary = PremiumNavy,
         onPrimary = Color.White,
-        primaryContainer = Color(0xFFD7EAF1),
-        onPrimaryContainer = Color(0xFF001F28),
-        secondary = Color(0xFF8B5E08),
-        secondaryContainer = Color(0xFFFFDEA3),
-        background = Color(0xFFF4F6F7),
+        primaryContainer = Color(0xFFDCEBEF),
+        onPrimaryContainer = PremiumInk,
+        secondary = PremiumGold,
+        secondaryContainer = Color(0xFFF5EAD7),
+        background = PremiumCanvas,
+        onBackground = PremiumInk,
         surface = Color.White,
-        surfaceContainerHigh = Color(0xFFE9EEF0),
-        error = Color(0xFFB3261E),
+        onSurface = PremiumInk,
+        surfaceContainerHigh = Color(0xFFF0F3F1),
+        outlineVariant = PremiumLine,
+        error = PremiumRed,
     )
-    MaterialTheme(colorScheme = colors, content = content)
+    MaterialTheme(
+        colorScheme = colors,
+        content = content,
+    )
 }

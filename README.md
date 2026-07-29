@@ -1,16 +1,17 @@
-# ExpoCheck v0.4.2
+# ExpoCheck v0.5.0 — Minimalistyczny Premium
 
-Poprawka skanowania cenówek na żywo.
+Wybrany wariant GUI nr 3 został wdrożony jako prawdziwy interfejs aplikacji:
 
-## Co naprawiono
+- biały, uporządkowany ekran,
+- ciemny granat i subtelny złoty akcent,
+- prowadzenie krokami: Produkt → Ceny → Zapis,
+- duże, czytelne wartości online i z cenówki,
+- spokojne karty i mniej zbędnego tekstu,
+- przeprojektowane ekrany startu, skanera, podsumowania i historii.
 
-- aplikacja nie zbiera już każdej przypadkowej liczby z kolejnych klatek,
-- cena musi zostać odczytana stabilnie w co najmniej dwóch klatkach,
-- po pobraniu strony pokazywane są tylko ceny występujące na Komfort.pl,
-- rozbite ceny typu `338` + `67` są łączone tylko wtedy, gdy leżą obok siebie i mają własną jednostkę,
-- pełna cena `529 zł/szt.` jest odczytywana jako `529,00 zł/szt.`,
-- numer produktu musi zostać potwierdzony w trzech klatkach,
-- QR może dostarczyć prawidłowy numer katalogowy,
-- porównywana jest także najniższa cena z 30 dni, jeśli występuje na stronie.
+## Naprawiony błąd parsera
 
-Dla cenówki produktu 100344378 oczekiwane wartości to `338,67 zł/szt.` oraz `529,00 zł/szt.`.
+Cena rozbita, np. `149 26 zł/m²`, jest zapisywana wyłącznie jako
+`149,26 zł/m²`. Fragment `26 zł/m²` nie może już stać się oddzielną ceną.
+
+Workflow buduje artefakt `ExpoCheck-v0.5.0-APK`.

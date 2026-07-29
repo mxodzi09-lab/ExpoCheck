@@ -138,7 +138,7 @@ private fun createAutoLookupWebView(
         settings.databaseEnabled = true
         settings.loadWithOverviewMode = true
         settings.useWideViewPort = true
-        settings.userAgentString = settings.userAgentString + " ExpoCheck/0.4.2"
+        settings.userAgentString = settings.userAgentString + " ExpoCheck/0.5.0"
         webChromeClient = WebChromeClient()
         addJavascriptInterface(
             AutoLookupBridge { payload -> handler.post { onPayload(payload) } },

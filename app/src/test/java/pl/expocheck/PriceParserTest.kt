@@ -158,4 +158,20 @@ fun recognizesCatalogNumberForAutomaticLookup() {
         assertEquals("100344378", label.catalogNumber)
     }
 
+
+@Test
+fun doesNotTreatCentsAsSeparateWholePrices() {
+    val label = PriceParser.parseLabel(
+        "Nr kat. 100622680 149 26 zł/m² 169 99 zł/m²",
+        emptyList(),
+    )
+    val values = PriceParser.detectedPrices(label).map { it.value }
+
+    assertEquals(2, values.size)
+    assertTrue(values.any { kotlin.math.abs(it - 149.26) < 0.001 })
+    assertTrue(values.any { kotlin.math.abs(it - 169.99) < 0.001 })
+    assertTrue(values.none { kotlin.math.abs(it - 26.0) < 0.001 })
+    assertTrue(values.none { kotlin.math.abs(it - 99.0) < 0.001 })
+}
+
 }

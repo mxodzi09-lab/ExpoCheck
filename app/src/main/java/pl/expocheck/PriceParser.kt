@@ -168,6 +168,15 @@ object PriceParser {
     ): List<PriceCandidate> {
         val candidates = mutableListOf<PriceCandidate>()
 
+        // Pełne zakresy cen rozbitych, np. „338 67 zł/szt.”.
+        // Potrzebujemy ich, aby nie zapisać fragmentu „67 zł/szt.”
+        // jako osobnej ceny 67,00 zł.
+        val splitMatches = if (allowSplitPrices) {
+            splitPriceRegex.findAll(text).toList()
+        } else {
+            emptyList()
+        }
+
         priceRegex.findAll(text).forEach { match ->
             val value = parseMoney(match.groupValues[1]) ?: return@forEach
             val unit = match.groupValues.getOrNull(2).orEmpty()
@@ -182,6 +191,12 @@ object PriceParser {
         }
 
         wholePriceRegex.findAll(text).forEach { match ->
+            val belongsToSplitPrice = splitMatches.any { split ->
+                match.range.first >= split.range.first &&
+                    match.range.last <= split.range.last
+            }
+            if (belongsToSplitPrice) return@forEach
+
             val value = match.groupValues[1]
                 .replace(" ", "")
                 .replace(".", "")
@@ -199,7 +214,7 @@ object PriceParser {
         }
 
         if (allowSplitPrices) {
-            splitPriceRegex.findAll(text).forEach { match ->
+            splitMatches.forEach { match ->
                 val whole = match.groupValues[1]
                 val cents = match.groupValues[2]
                 val value = "$whole.$cents".toDoubleOrNull() ?: return@forEach
