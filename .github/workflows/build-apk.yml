@@ -24,6 +24,12 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Zachowaj klucz podpisu między wersjami
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: expocheck-debug-keystore-v1
+
       - name: Test parsera cen
         run: gradle testDebugUnitTest
 
@@ -33,5 +39,5 @@ jobs:
       - name: Udostępnij APK
         uses: actions/upload-artifact@v4
         with:
-          name: ExpoCheck-v0.1-APK
+          name: ExpoCheck-v0.4-APK
           path: app/build/outputs/apk/debug/app-debug.apk

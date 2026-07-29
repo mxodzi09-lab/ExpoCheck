@@ -14,9 +14,40 @@ data class PageSnapshot(
     val scannedAt: Long = System.currentTimeMillis(),
 )
 
+data class OcrToken(
+    val text: String,
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+) {
+    val width: Int get() = (right - left).coerceAtLeast(1)
+    val height: Int get() = (bottom - top).coerceAtLeast(1)
+    val centerY: Double get() = (top + bottom) / 2.0
+}
+
+data class DetectedPrice(
+    val value: Double = 0.0,
+    val unit: String = "",
+)
+
+data class ComparablePagePrice(
+    val label: String,
+    val value: Double,
+    val unit: String,
+)
+
+data class PriceComparison(
+    val online: ComparablePagePrice,
+    val matchedLabelPrice: DetectedPrice? = null,
+)
+
 data class LabelScan(
+    // Zachowane dla zgodności ze starszymi zapisami. W v0.3 właściwym źródłem
+    // jest lista `prices`, bo cenówka może zawierać kilka poprawnych cen.
     val price: Double? = null,
     val unit: String = "",
+    val prices: List<DetectedPrice> = emptyList(),
     val catalogNumber: String = "",
     val ean: String = "",
     val rawText: String = "",
@@ -54,7 +85,8 @@ data class SeedProduct(
 )
 
 object SeedProducts {
-    // Dane startowe sprawdzone 28.07.2026. Aplikacja odświeża je po otwarciu strony.
+    // Dane startowe są tylko awaryjne. Po otwarciu produktu aplikacja odczytuje
+    // aktualne wartości bezpośrednio ze strony Komfortu.
     val items = listOf(
         SeedProduct(
             catalogNumber = "100630301",

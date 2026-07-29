@@ -18,7 +18,18 @@ class RecordStore(private val context: Context) {
         val json = prefs.getString("records", "[]").orEmpty()
         return runCatching {
             val type = object : TypeToken<List<ProductRecord>>() {}.type
-            gson.fromJson<List<ProductRecord>>(json, type).orEmpty()
+            gson.fromJson<List<ProductRecord>>(json, type).orEmpty().map { record ->
+                val oldPrices = runCatching { record.label.prices }.getOrNull().orEmpty()
+                if (oldPrices.isEmpty() && record.label.price != null) {
+                    record.copy(
+                        label = record.label.copy(
+                            prices = listOf(DetectedPrice(record.label.price, record.label.unit))
+                        )
+                    )
+                } else {
+                    record
+                }
+            }
         }.getOrDefault(emptyList())
     }
 

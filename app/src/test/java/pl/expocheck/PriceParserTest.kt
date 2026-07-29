@@ -46,4 +46,66 @@ class PriceParserTest {
         val label = PriceParser.parseLabel("Nr kat. 100159819 Cena 99,97 zł/m²", emptyList())
         assertTrue(PriceParser.pricesMatch(page, label) == true)
     }
+
+    @Test
+    fun parsesEveryPriceFromComfortLabel() {
+        val text = """
+            PANEL PODŁOGOWY
+            149 26*
+            zł/m²
+            169 99**
+            zł/m²
+            Nr kat. 100622680
+        """.trimIndent()
+        val label = PriceParser.parseLabel(text, emptyList())
+        val values = PriceParser.detectedPrices(label).map { it.value }
+        assertTrue(values.any { kotlin.math.abs(it - 149.26) < 0.001 })
+        assertTrue(values.any { kotlin.math.abs(it - 169.99) < 0.001 })
+        assertEquals("100622680", label.catalogNumber)
+    }
+
+    @Test
+    fun comparesBothWithoutAndWithInstallation() {
+        val page = PageSnapshot(
+            currentPrice = 169.99,
+            installationPrice = 149.26,
+            unit = "zł/m²",
+        )
+        val label = PriceParser.parseLabel(
+            "149 26* zł/m² 169 99** zł/m² Nr kat. 100622680",
+            emptyList(),
+        )
+        val comparisons = PriceParser.comparePrices(page, label)
+        assertEquals(2, comparisons.size)
+        assertTrue(comparisons.all { it.matchedLabelPrice != null })
+        assertTrue(PriceParser.pricesMatch(page, label) == true)
+    }
+
+    @Test
+    fun parsesBothSpatialPricesOnComfortLabel() {
+        val tokens = listOf(
+            OcrToken("149", 110, 180, 430, 430),
+            OcrToken("26*", 438, 210, 545, 330),
+            OcrToken("zł/m²", 450, 350, 570, 400),
+            OcrToken("169", 120, 500, 310, 620),
+            OcrToken("99**", 315, 510, 390, 575),
+            OcrToken("zł/m²", 320, 585, 420, 625),
+            OcrToken("100622680", 180, 800, 390, 845),
+        )
+        val label = PriceParser.parseLabel("149 26 zł/m² 169 99 zł/m² 100622680", emptyList(), tokens)
+        val values = PriceParser.detectedPrices(label).map { it.value }
+        assertTrue(values.any { kotlin.math.abs(it - 149.26) < 0.001 })
+        assertTrue(values.any { kotlin.math.abs(it - 169.99) < 0.001 })
+    }
+
+@Test
+fun recognizesCatalogNumberForAutomaticLookup() {
+    val label = PriceParser.parseLabel(
+        "PANEL PODŁOGOWY Nr kat. 100622680 149 26 zł/m² 169 99 zł/m²",
+        emptyList(),
+    )
+    assertEquals("100622680", label.catalogNumber)
+    assertEquals(2, PriceParser.detectedPrices(label).size)
+}
+
 }

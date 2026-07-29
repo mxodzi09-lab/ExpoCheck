@@ -149,11 +149,14 @@ fun KomfortBrowserScreen(
                         Text(page.name.ifBlank { "Produkt Komfort" }, style = MaterialTheme.typography.titleMedium)
                         Text("Nr kat.: ${page.catalogNumber.ifBlank { "—" }}")
                         Text(
-                            "Cena online: ${PriceParser.money(page.currentPrice)} ${page.unit}",
+                            "Bez montażu: ${PriceParser.money(page.currentPrice)} ${page.unit}",
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         page.installationPrice?.let {
-                            Text("Z montażem: ${PriceParser.money(it)} ${page.unit}")
+                            Text(
+                                "Z montażem: ${PriceParser.money(it)} ${page.unit}",
+                                style = MaterialTheme.typography.titleLarge,
+                            )
                         }
                         page.discountPercent?.let { Text("Promocja: -$it%") }
                         page.lowest30Price?.let { Text("Najniższa z 30 dni: ${PriceParser.money(it)} ${page.unit}") }
@@ -193,7 +196,7 @@ private fun createKomfortWebView(
         settings.databaseEnabled = true
         settings.loadWithOverviewMode = true
         settings.useWideViewPort = true
-        settings.userAgentString = settings.userAgentString + " ExpoCheck/0.1"
+        settings.userAgentString = settings.userAgentString + " ExpoCheck/0.4"
         webChromeClient = WebChromeClient()
         addJavascriptInterface(PageBridge { payload -> handler.post { onPayload(payload) } }, "ExpoCheckBridge")
         webViewClient = object : WebViewClient() {

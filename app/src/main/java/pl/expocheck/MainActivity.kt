@@ -95,6 +95,7 @@ private fun ExpoCheckRoot() {
     var browserCode by remember { mutableStateOf("") }
     var pageSnapshot by remember { mutableStateOf(PageSnapshot()) }
     var labelScan by remember { mutableStateOf(LabelScan()) }
+    var scannerReturn by remember { mutableStateOf(Screen.HOME) }
 
     when (screen) {
         Screen.ONBOARDING -> NicknameScreen(
@@ -110,9 +111,10 @@ private fun ExpoCheckRoot() {
             nickname = nickname,
             records = records,
             onOpenScanner = {
-                browserUrl = "https://komfort.pl"
-                browserCode = ""
-                screen = Screen.BROWSER
+                pageSnapshot = PageSnapshot()
+                labelScan = LabelScan()
+                scannerReturn = Screen.HOME
+                screen = Screen.SCANNER
             },
             onOpenSeed = { seed ->
                 browserUrl = seed.url
@@ -130,13 +132,15 @@ private fun ExpoCheckRoot() {
             onScanLabel = {
                 pageSnapshot = it
                 labelScan = LabelScan()
+                scannerReturn = Screen.BROWSER
                 screen = Screen.SCANNER
             },
         )
 
         Screen.SCANNER -> LabelScannerScreen(
             online = pageSnapshot,
-            onBack = { screen = Screen.BROWSER },
+            onBack = { screen = scannerReturn },
+            onOnlineResolved = { pageSnapshot = it },
             onConfirmed = {
                 labelScan = it
                 screen = Screen.REVIEW
@@ -256,7 +260,7 @@ private fun HomeScreen(
         ) {
             item {
                 Text("Cześć, $nickname 👋", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Skanuj stronę i cenówkę — wynik zobaczysz od razu.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Pokaż cenówkę. Kod produktu sam pobierze ceny ze strony Komfortu.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             item {
@@ -269,7 +273,7 @@ private fun HomeScreen(
             item {
                 Button(onClick = onOpenScanner, modifier = Modifier.fillMaxWidth().height(58.dp)) {
                     Icon(Icons.Default.QrCodeScanner, contentDescription = null)
-                    Text("  Skanuj produkt i cenówkę")
+                    Text("  Skanuj cenówkę — ceny pobiorą się same")
                 }
             }
 
@@ -481,21 +485,38 @@ private fun ResultHero(matches: Boolean?, page: PageSnapshot, label: LabelScan) 
         null -> Color(0xFFFFF3D5)
     }
     val headline = when (matches) {
-        true -> "Cena prawidłowa"
-        false -> "Cena się nie zgadza"
+        true -> "Wszystkie ceny prawidłowe"
+        false -> "Nie wszystkie ceny się zgadzają"
         null -> "Wymaga sprawdzenia"
     }
-    val difference = if (page.currentPrice != null && label.price != null) label.price - page.currentPrice else null
+    val comparisons = PriceParser.comparePrices(page, label)
+    val shelfPrices = PriceParser.detectedPrices(label)
 
     Card(colors = CardDefaults.cardColors(containerColor = background), shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(headline, color = color, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Strona: ${PriceParser.money(page.currentPrice)} ${page.unit}", style = MaterialTheme.typography.titleLarge)
-            Text("Cenówka: ${PriceParser.money(label.price)} ${label.unit}", style = MaterialTheme.typography.titleLarge)
-            difference?.let {
-                val prefix = if (it > 0) "+" else ""
-                Text("Różnica: $prefix${PriceParser.money(it)}", color = color, fontWeight = FontWeight.Bold)
+
+            Text("Ceny ze strony", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            comparisons.forEach { comparison ->
+                val matched = comparison.matchedLabelPrice != null
+                val marker = if (matched) "✓" else "✕"
+                val rowColor = if (matched) Color(0xFF177A4A) else Color(0xFFB3261E)
+                Text(
+                    "$marker ${comparison.online.label}: ${PriceParser.money(comparison.online.value)} ${comparison.online.unit}",
+                    color = rowColor,
+                    style = MaterialTheme.typography.titleMedium,
+                )
             }
+
+            Text("Ceny odczytane z cenówki", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (shelfPrices.isEmpty()) {
+                Text("Nie odczytano żadnej ceny")
+            } else {
+                shelfPrices.forEach { shelf ->
+                    Text("• ${PriceParser.money(shelf.value)} ${shelf.unit.ifBlank { page.unit }}")
+                }
+            }
+
             page.discountPercent?.let { Text("Promocja online: -$it%") }
             page.lowest30Price?.let { Text("Najniższa cena z 30 dni: ${PriceParser.money(it)} ${page.unit}") }
         }
@@ -549,8 +570,19 @@ private fun HistoryCard(record: ProductRecord, onDelete: () -> Unit) {
                 }
                 IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Usuń") }
             }
-            Text("Strona: ${PriceParser.money(record.page.currentPrice)} ${record.page.unit}")
-            Text("Cenówka: ${PriceParser.money(record.label.price)} ${record.label.unit}")
+            PriceParser.comparablePagePrices(record.page).forEach { online ->
+                Text("${online.label}: ${PriceParser.money(online.value)} ${online.unit}")
+            }
+            val recordedShelfPrices = PriceParser.detectedPrices(record.label)
+            if (recordedShelfPrices.isNotEmpty()) {
+                Text(
+                    "Cenówka: " + recordedShelfPrices.joinToString(" • ") {
+                        "${PriceParser.money(it.value)} ${it.unit.ifBlank { record.page.unit }}"
+                    }
+                )
+            } else {
+                Text("Cenówka: —")
+            }
             AssistChip(onClick = {}, label = { Text(record.status.label) })
             Text("${record.nickname} • ${format.format(Date(record.createdAt))}", color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (record.note.isNotBlank()) Text(record.note)
