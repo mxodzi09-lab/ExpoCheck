@@ -477,7 +477,7 @@ private fun mergeAdjacentWholeTokens(
                 val maxGap = max(left.height * 0.42, 70.0)
 
                 val sameLargeRow =
-                    gap in 0.0..maxGap &&
+                    gap.toDouble() in 0.0..maxGap &&
                         centerDelta <= max(
                             left.height,
                             right.height,

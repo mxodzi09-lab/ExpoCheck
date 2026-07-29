@@ -1,15 +1,21 @@
-# ExpoCheck v0.5.2 — skaner dużych cen
+# ExpoCheck v0.5.3 — naprawiony build
 
-Ta wersja nie otwiera już strony Komfortu i niczego nie pobiera z internetu.
+Naprawiono błąd kompilacji w PriceParser.kt:
 
-Skaner:
-- wykrywa wyłącznie największe cyfry cenowe,
-- łączy `1` + `111` + `92` w `1111,92`,
-- łączy `777` + `36` w `777,36`,
-- ignoruje małe ceny, daty, EAN, wymiary, procenty i tekst,
-- pokazuje maksymalnie trzy dominujące ceny,
-- zapisuje numer produktu, jeśli uda się go stabilnie odczytać.
+`gap in 0.0..maxGap`
 
-Panel na dole jest mały i nie zasłania cenówki.
+zostało zmienione na:
 
-Artefakt GitHub Actions: `ExpoCheck-v0.5.2-APK`.
+`gap.toDouble() in 0.0..maxGap`
+
+Poprzednia wersja próbowała sprawdzić wartość Int w zakresie Double,
+co zatrzymywało GitHub Actions przed zbudowaniem APK.
+
+Tryb aplikacji pozostaje bez zmian:
+- brak otwierania strony Komfortu,
+- skanowanie wyłącznie największych cyfr ceny,
+- łączenie dużych złotych z mniejszymi groszami,
+- ignorowanie dat, kodów EAN, wymiarów i małego tekstu,
+- mały panel na dole ekranu.
+
+Artefakt: `ExpoCheck-v0.5.3-APK`.
