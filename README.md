@@ -1,21 +1,16 @@
-# ExpoCheck v0.4
+# ExpoCheck v0.4.1
 
-Wersja łączy oba wymagania w jednym trybie:
+Poprawka błędu parsera strony Komfortu.
 
-1. kamera skanuje **wszystkie ceny** widoczne na cenówce,
-2. kamera wykrywa numer produktu `100xxxxxx`,
-3. aplikacja automatycznie wyszukuje produkt na Komfort.pl,
-4. pobiera ze strony ceny bez montażu i z montażem, jednostkę oraz promocję,
-5. od razu porównuje każdą cenę z cenówki z cenami internetowymi.
+W v0.4 parser mógł uznać cenę „Oszczędzasz” za „najniższą cenę z 30 dni”,
+ponieważ wybierał kwotę po samej odległości. Teraz najpierw wybiera cenę
+występującą po właściwym opisie:
 
-Nie trzeba najpierw osobno otwierać strony produktu.
+- Bez montażu
+- Przy zakupie montażu
+- Oszczędzasz
+- Najniższa cena z 30 dni
 
-## Budowanie
-
-Projekt zawiera GitHub Actions. Po wysłaniu zmian na GitHuba pobierz artefakt:
-
-`ExpoCheck-v0.4-APK`
-
-## Aktualizacja przez Termuxa
-
-Po pobraniu ZIP-a można wkleić blok poleceń podany w wiadomości ChatGPT.
+Pozostałe funkcje v0.4 pozostają bez zmian:
+automatyczne wykrycie numeru produktu, pobranie cen ze strony i porównanie
+wszystkich cen widocznych na cenówce.

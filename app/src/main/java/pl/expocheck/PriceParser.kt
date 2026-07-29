@@ -338,19 +338,42 @@ object PriceParser {
         markers: List<String>,
         excludedStarts: Set<Int> = emptySet(),
     ): PriceCandidate? {
-        val all = extractTextCandidates(text)
-        val markerIndices = markers.mapNotNull { marker ->
-            text.indexOf(marker, ignoreCase = true).takeIf { it >= 0 }
-        }
-        if (markerIndices.isEmpty()) return null
+        val all = extractTextCandidates(text).filterNot { it.start in excludedStarts }
+        if (all.isEmpty()) return null
 
-        return all
-            .filterNot { it.start in excludedStarts }
-            .map { candidate ->
-                val distance = markerIndices.minOf { markerIndex -> abs(candidate.start - markerIndex) }
-                candidate to distance
+        val occurrences = markers.flatMap { marker ->
+            Regex(Regex.escape(marker), RegexOption.IGNORE_CASE)
+                .findAll(text)
+                .map { match -> match.range.last + 1 }
+                .toList()
+        }
+        if (occurrences.isEmpty()) return null
+
+        // Na stronie Komfortu opis zwykle stoi PRZED właściwą kwotą:
+        // "Bez montażu 349,00", "Oszczędzasz 10,00",
+        // "Najniższa cena z 30 dni: 59,97".
+        // Najpierw szukamy więc najbliższej ceny po markerze.
+        val after = all
+            .mapNotNull { candidate ->
+                val distance = occurrences
+                    .map { markerEnd -> candidate.start - markerEnd }
+                    .filter { it >= 0 }
+                    .minOrNull()
+                distance?.let { candidate to it }
             }
             .filter { (_, distance) -> distance <= 320 }
+            .minByOrNull { it.second }
+            ?.first
+
+        if (after != null) return after
+
+        // Awaryjnie obsługujemy nietypowy układ, w którym kwota stoi przed opisem.
+        return all
+            .map { candidate ->
+                val distance = occurrences.minOf { markerEnd -> abs(candidate.start - markerEnd) }
+                candidate to distance
+            }
+            .filter { (_, distance) -> distance <= 180 }
             .minByOrNull { it.second }
             ?.first
     }
