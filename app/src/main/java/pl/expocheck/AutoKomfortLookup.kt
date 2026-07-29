@@ -26,13 +26,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 /**
- * Niewidoczny czytnik strony Komfortu.
- *
- * Gdy skaner zauważy numer produktu na cenówce, ten komponent:
- * 1. otwiera wyszukiwarkę Komfortu,
- * 2. znajduje kartę produktu zawierającą numer,
- * 3. odczytuje z niej ceny, jednostkę i promocję,
- * 4. przekazuje wynik z powrotem do skanera.
+ * Najpierw pobiera kartę produktu bezpośrednio przez HTTP.
+ * Ukryty WebView uruchamia się wyłącznie jako plan awaryjny.
  */
 @Composable
 fun AutoKomfortLookup(
@@ -45,60 +40,55 @@ fun AutoKomfortLookup(
     val normalized = remember(code) { code.filter(Char::isDigit).take(14) }
     if (normalized.length < 8) return
 
-    val seed = remember(normalized) {
-        SeedProducts.items.firstOrNull { it.catalogNumber == normalized }
-    }
     var completed by remember(normalized) { mutableStateOf(false) }
+    var useWebFallback by remember(normalized) { mutableStateOf(false) }
 
     LaunchedEffect(normalized) {
         completed = false
-        onState("Rozpoznano kod $normalized — pobieram ceny z Komfort.pl…")
+        useWebFallback = false
+        onState("Sprawdzam produkt $normalized na Komfort.pl…")
 
-        if (seed != null) {
+        val remote = KomfortRemoteLookup.resolve(normalized)
+        if (remote != null) {
             completed = true
-            onResolved(
-                PageSnapshot(
-                    name = seed.name,
-                    catalogNumber = seed.catalogNumber,
-                    currentPrice = seed.currentPrice,
-                    unit = seed.unit,
-                    installationPrice = seed.installationPrice,
-                    lowest30Price = seed.lowest30Price,
-                    discountPercent = seed.discountPercent,
-                    savings = seed.savings,
-                    url = seed.url,
-                )
-            )
-            onState("Pobrano ceny produktu ${seed.catalogNumber}")
+            onResolved(remote)
+            onState("Aktualne ceny zostały pobrane.")
             return@LaunchedEffect
         }
 
-        delay(22_000)
+        onState("Otwieram kartę produktu…")
+        useWebFallback = true
+
+        delay(16_000)
         if (!completed) {
-            onError("Nie udało się automatycznie otworzyć produktu $normalized. Przytrzymaj kod w kadrze albo spróbuj ponownie.")
+            onError(
+                "Nie udało się pobrać cen. Utrzymaj kod w kadrze " +
+                    "albo sprawdź połączenie z internetem."
+            )
         }
     }
 
-    if (seed == null) {
+    if (useWebFallback && !completed) {
         val webView = remember(normalized) {
-            createAutoLookupWebView(
+            createFallbackWebView(
                 context = context,
                 code = normalized,
                 onPayload = { payload ->
-                    val parsed = runCatching { PriceParser.parsePageJson(payload) }.getOrNull()
+                    val parsed = runCatching {
+                        PriceParser.parsePageJson(payload)
+                    }.getOrNull()
+
                     if (
                         parsed != null &&
                         parsed.currentPrice != null &&
                         (
                             parsed.catalogNumber == normalized ||
-                            parsed.url.contains(normalized)
+                                parsed.url.contains(normalized)
                         )
                     ) {
-                        if (!completed) {
-                            completed = true
-                            onResolved(parsed)
-                            onState("Pobrano ceny ze strony Komfortu")
-                        }
+                        completed = true
+                        onResolved(parsed)
+                        onState("Aktualne ceny zostały pobrane.")
                     }
                 },
                 onFailure = { message ->
@@ -116,13 +106,13 @@ fun AutoKomfortLookup(
 
         AndroidView(
             factory = { webView },
-            modifier = Modifier.size(1.dp).alpha(0.01f),
+            modifier = Modifier.size(2.dp).alpha(0.01f),
         )
     }
 }
 
 @SuppressLint("SetJavaScriptEnabled")
-private fun createAutoLookupWebView(
+private fun createFallbackWebView(
     context: Context,
     code: String,
     onPayload: (String) -> Unit,
@@ -136,22 +126,25 @@ private fun createAutoLookupWebView(
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.databaseEnabled = true
-        settings.loadWithOverviewMode = true
-        settings.useWideViewPort = true
-        settings.userAgentString = settings.userAgentString + " ExpoCheck/0.5.0"
+        settings.loadsImagesAutomatically = false
+        settings.userAgentString =
+            settings.userAgentString + " ExpoCheck/0.5.1"
+
         webChromeClient = WebChromeClient()
         addJavascriptInterface(
-            AutoLookupBridge { payload -> handler.post { onPayload(payload) } },
+            FallbackBridge { payload ->
+                handler.post { onPayload(payload) }
+            },
             "ExpoCheckAutoBridge",
         )
 
         webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
-                if (url.contains("/p/")) {
-                    installAutoProductReader(view)
+                if (url.contains("/p/") && url.contains(code)) {
+                    installProductReader(view)
                 } else {
-                    installAutoSearchNavigator(view, code)
+                    installSearchNavigator(view, code)
                 }
             }
 
@@ -162,9 +155,19 @@ private fun createAutoLookupWebView(
                 description: String?,
                 failingUrl: String?,
             ) {
-                super.onReceivedError(view, errorCode, description, failingUrl)
+                super.onReceivedError(
+                    view,
+                    errorCode,
+                    description,
+                    failingUrl,
+                )
                 handler.post {
-                    onFailure("Błąd strony Komfortu: ${description.orEmpty().ifBlank { "brak połączenia" }}")
+                    onFailure(
+                        "Błąd strony Komfortu: " +
+                            description.orEmpty().ifBlank {
+                                "brak połączenia"
+                            }
+                    )
                 }
             }
         }
@@ -173,31 +176,34 @@ private fun createAutoLookupWebView(
     }
 }
 
-private class AutoLookupBridge(
+private class FallbackBridge(
     private val callback: (String) -> Unit,
 ) {
     @JavascriptInterface
     fun onProduct(payload: String) = callback(payload)
 }
 
-private fun installAutoSearchNavigator(webView: WebView, code: String) {
+private fun installSearchNavigator(
+    webView: WebView,
+    code: String,
+) {
     val safeCode = code.filter(Char::isDigit)
     val script = """
         (function() {
           var wanted = '$safeCode';
 
-          function findCard() {
+          function findProduct() {
             try {
-              if (location.pathname.indexOf('/p/') >= 0) return;
-
               var links = Array.prototype.slice.call(
                 document.querySelectorAll('a[href*="/p/"]')
               );
 
               var exact = links.find(function(a) {
-                var href = (a.href || '');
-                var text = (a.innerText || '') + ' ' + (a.getAttribute('aria-label') || '');
-                return href.indexOf(wanted) >= 0 || text.indexOf(wanted) >= 0;
+                var href = a.href || '';
+                var text = (a.innerText || '') + ' ' +
+                           (a.getAttribute('aria-label') || '');
+                return href.indexOf(wanted) >= 0 ||
+                       text.indexOf(wanted) >= 0;
               });
 
               if (exact && exact.href) {
@@ -206,27 +212,31 @@ private fun installAutoSearchNavigator(webView: WebView, code: String) {
             } catch (e) {}
           }
 
-          if (!window.__expoCheckAutoSearch) {
-            window.__expoCheckAutoSearch = true;
-            setInterval(findCard, 900);
-            var observer = new MutationObserver(findCard);
+          if (!window.__expoCheckSearch051) {
+            window.__expoCheckSearch051 = true;
+            setInterval(findProduct, 500);
+            var observer = new MutationObserver(findProduct);
             if (document.body) {
-              observer.observe(document.body, {subtree:true, childList:true, characterData:true});
+              observer.observe(
+                document.body,
+                {subtree:true, childList:true, characterData:true}
+              );
             }
           }
-          findCard();
+          findProduct();
         })();
     """.trimIndent()
     webView.evaluateJavascript(script, null)
 }
 
-private fun installAutoProductReader(webView: WebView) {
+private fun installProductReader(webView: WebView) {
     val script = """
         (function() {
           function sendProduct() {
             try {
               var titleNode = document.querySelector('h1');
-              var imageNode = document.querySelector('meta[property="og:image"]');
+              var imageNode =
+                document.querySelector('meta[property="og:image"]');
               var data = {
                 title: titleNode ? titleNode.innerText : document.title,
                 body: document.body ? document.body.innerText : '',
@@ -237,17 +247,18 @@ private fun installAutoProductReader(webView: WebView) {
             } catch (e) {}
           }
 
-          if (!window.__expoCheckAutoReader) {
-            window.__expoCheckAutoReader = true;
-            var timer = null;
+          if (!window.__expoCheckReader051) {
+            window.__expoCheckReader051 = true;
+            setInterval(sendProduct, 1200);
             var observer = new MutationObserver(function() {
-              clearTimeout(timer);
-              timer = setTimeout(sendProduct, 500);
+              setTimeout(sendProduct, 250);
             });
             if (document.body) {
-              observer.observe(document.body, {subtree:true, childList:true, characterData:true});
+              observer.observe(
+                document.body,
+                {subtree:true, childList:true, characterData:true}
+              );
             }
-            setInterval(sendProduct, 2200);
           }
           sendProduct();
         })();

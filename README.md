@@ -1,17 +1,12 @@
-# ExpoCheck v0.5.0 — Minimalistyczny Premium
+# ExpoCheck v0.5.1
 
-Wybrany wariant GUI nr 3 został wdrożony jako prawdziwy interfejs aplikacji:
+## Najważniejsze poprawki
 
-- biały, uporządkowany ekran,
-- ciemny granat i subtelny złoty akcent,
-- prowadzenie krokami: Produkt → Ceny → Zapis,
-- duże, czytelne wartości online i z cenówki,
-- spokojne karty i mniej zbędnego tekstu,
-- przeprojektowane ekrany startu, skanera, podsumowania i historii.
+- po wykryciu numeru produktu aplikacja od razu sprawdza Komfort.pl w tle,
+- najpierw używa szybkiego pobrania strony przez HTTP,
+- niewidoczny WebView działa tylko jako awaryjny plan B,
+- kod produktu jest zatwierdzany po 2 poprawnych klatkach,
+- panel skanera jest znacznie niższy i nie zasłania połowy cenówki,
+- szczegółowe dane są pokazywane dopiero na ekranie zapisu.
 
-## Naprawiony błąd parsera
-
-Cena rozbita, np. `149 26 zł/m²`, jest zapisywana wyłącznie jako
-`149,26 zł/m²`. Fragment `26 zł/m²` nie może już stać się oddzielną ceną.
-
-Workflow buduje artefakt `ExpoCheck-v0.5.0-APK`.
+Artefakt GitHub Actions: `ExpoCheck-v0.5.1-APK`.

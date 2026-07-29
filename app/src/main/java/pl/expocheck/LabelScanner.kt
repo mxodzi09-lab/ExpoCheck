@@ -38,6 +38,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -205,7 +206,7 @@ fun LabelScannerScreen(
                             catalogHits = 1
                         }
 
-                        if (catalogHits >= 3 && rawCatalog != acceptedCatalog) {
+                        if (catalogHits >= 2 && rawCatalog != acceptedCatalog) {
                             acceptedCatalog = rawCatalog
                             resolvedOnline =
                                 PageSnapshot(catalogNumber = rawCatalog)
@@ -214,11 +215,11 @@ fun LabelScannerScreen(
                                 "Pobieram aktualne ceny produktu $rawCatalog…"
                             priceVotes = emptyMap()
                         } else if (
-                            catalogHits < 3 &&
+                            catalogHits < 2 &&
                             acceptedCatalog.isBlank()
                         ) {
                             lookupMessage =
-                                "Potwierdzam kod $rawCatalog • $catalogHits/3"
+                                "Potwierdzam kod $rawCatalog • $catalogHits/2"
                         }
                     }
 
@@ -407,264 +408,200 @@ private fun ScannerBottomSheet(
     lookupMessage: String,
     onConfirm: () -> Unit,
 ) {
-    val code = page.catalogNumber
-        .ifBlank { scan.catalogNumber }
+    val code = page.catalogNumber.ifBlank { scan.catalogNumber }
+    val isLoading = code.isNotBlank() && onlinePrices.isEmpty()
+    val result = scannerResult(
+        hasCode = code.isNotBlank(),
+        onlineCount = onlinePrices.size,
+        shelfCount = shelfPrices.size,
+        matchedCount = matchedCount,
+        lookupMessage = lookupMessage,
+    )
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(10.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFAFFFFFF),
+            containerColor = Color(0xF7FFFFFF),
         ),
-        shape = RoundedCornerShape(30.dp),
+        shape = RoundedCornerShape(24.dp),
     ) {
         Column(
-            modifier = Modifier
-                .heightIn(max = 560.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(
-                    start = 18.dp,
-                    end = 18.dp,
-                    top = 10.dp,
-                    bottom = 16.dp,
-                ),
-            verticalArrangement = Arrangement.spacedBy(11.dp),
+            modifier = Modifier.padding(
+                horizontal = 15.dp,
+                vertical = 11.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .size(width = 42.dp, height = 4.dp)
-                    .background(
-                        ScannerLine,
-                        RoundedCornerShape(10.dp),
-                    )
-            )
-
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(11.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = ScannerNavy,
+                    color = result.second.copy(alpha = 0.12f),
                 ) {
                     Box(
-                        modifier = Modifier.size(38.dp),
+                        modifier = Modifier.size(34.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             Icons.Default.FlashOn,
                             contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp),
+                            tint = result.second,
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         if (code.isBlank()) {
-                            "Skanowanie produktu"
+                            "Skanuj kod i ceny"
                         } else {
                             "Produkt $code"
                         },
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = ScannerInk,
                     )
                     Text(
-                        page.name.ifBlank { lookupMessage },
+                        when {
+                            page.name.isNotBlank() -> page.name
+                            else -> lookupMessage
+                        },
                         color = ScannerMuted,
                         style = MaterialTheme.typography.bodySmall,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-            }
 
-            ScannerStepBars(
-                current = when {
-                    code.isBlank() -> 1
-                    onlinePrices.isEmpty() || shelfPrices.isEmpty() -> 2
-                    else -> 3
-                }
-            )
-
-            if (onlinePrices.isEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(17.dp),
-                    color = ScannerNavy.copy(alpha = 0.07f),
+                if (
+                    onlinePrices.isNotEmpty() &&
+                    shelfPrices.isNotEmpty()
                 ) {
-                    Text(
-                        lookupMessage,
-                        modifier = Modifier.padding(13.dp),
-                        color = ScannerInk,
-                    )
-                }
-            } else {
-                comparisons.forEach { comparison ->
-                    ScannerPriceRow(comparison)
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = result.second.copy(alpha = 0.10f),
+                    ) {
+                        Text(
+                            if (matchedCount == onlinePrices.size) {
+                                "ZGODNE"
+                            } else {
+                                "SPRAWDŹ"
+                            },
+                            color = result.second,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(
+                                horizontal = 9.dp,
+                                vertical = 6.dp,
+                            ),
+                        )
+                    }
                 }
             }
 
-            if (
-                onlinePrices.isEmpty() &&
-                shelfPrices.isNotEmpty()
-            ) {
+            if (isLoading) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp),
+                    color = ScannerNavy,
+                    trackColor = ScannerLine,
+                )
+            }
+
+            if (onlinePrices.isNotEmpty()) {
+                comparisons.take(3).forEach { comparison ->
+                    CompactPriceLine(comparison)
+                }
+            } else if (shelfPrices.isNotEmpty()) {
                 Text(
-                    "Odczytane z cenówki: " +
-                        shelfPrices.joinToString(" • ") {
+                    "Cenówka: " +
+                        shelfPrices.take(3).joinToString(" • ") {
                             "${PriceParser.money(it.value)} " +
                                 it.unit.ifBlank { page.unit }
                         },
                     color = ScannerInk,
                     style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
 
-            val result = scannerResult(
-                hasCode = code.isNotBlank(),
-                onlineCount = onlinePrices.size,
-                shelfCount = shelfPrices.size,
-                matchedCount = matchedCount,
-                lookupMessage = lookupMessage,
-            )
-
-            Surface(
-                shape = RoundedCornerShape(17.dp),
-                color = result.second.copy(alpha = 0.10f),
-                border = BorderStroke(
-                    1.dp,
-                    result.second.copy(alpha = 0.22f),
-                ),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
                     result.first,
-                    modifier = Modifier.padding(13.dp),
+                    modifier = Modifier.weight(1f),
                     color = result.second,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
-            }
 
-            Button(
-                onClick = onConfirm,
-                enabled = shelfPrices.isNotEmpty() && code.isNotBlank(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-                shape = RoundedCornerShape(17.dp),
-            ) {
-                Icon(Icons.Default.Check, contentDescription = null)
-                Text(
-                    "  Przejdź do zapisu",
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScannerStepBars(current: Int) {
-    val labels = listOf("Produkt", "Ceny", "Zapis")
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        labels.forEachIndexed { index, label ->
-            val active = index + 1 <= current
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(3.dp)
-                        .background(
-                            if (active) ScannerNavy else ScannerLine,
-                            RoundedCornerShape(8.dp),
+                if (
+                    code.isNotBlank() &&
+                    shelfPrices.isNotEmpty() &&
+                    onlinePrices.isNotEmpty()
+                ) {
+                    Button(
+                        onClick = onConfirm,
+                        modifier = Modifier.height(44.dp),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(17.dp),
                         )
-                )
-                Text(
-                    label,
-                    color = if (active) ScannerInk else ScannerMuted,
-                    style = MaterialTheme.typography.labelSmall,
-                )
+                        Text("  Dalej")
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ScannerPriceRow(
+private fun CompactPriceLine(
     comparison: PriceComparison,
 ) {
     val shelf = comparison.matchedLabelPrice
     val matched = shelf != null
     val accent = if (matched) ScannerGreen else ScannerRed
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Text(
             comparison.online.label,
+            modifier = Modifier.weight(1f),
             color = ScannerMuted,
             style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ScannerPriceBox(
-                label = "ONLINE",
-                value =
-                    "${PriceParser.money(comparison.online.value)} " +
-                        comparison.online.unit,
-                modifier = Modifier.weight(1f),
-                accent = ScannerNavy,
-            )
-            ScannerPriceBox(
-                label = "CENÓWKA",
-                value = shelf?.let {
-                    "${PriceParser.money(it.value)} " +
-                        it.unit.ifBlank { comparison.online.unit }
-                } ?: "brak",
-                modifier = Modifier.weight(1f),
-                accent = accent,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ScannerPriceBox(
-    label: String,
-    value: String,
-    modifier: Modifier,
-    accent: Color,
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(15.dp),
-        color = Color(0xFFF8F9F8),
-        border = BorderStroke(
-            1.dp,
-            accent.copy(alpha = 0.18f),
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(11.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                color = ScannerMuted,
-            )
-            Text(
-                value,
-                color = accent,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        Text(
+            "${PriceParser.money(comparison.online.value)} " +
+                comparison.online.unit,
+            color = ScannerNavy,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            if (matched) "✓" else "—",
+            color = accent,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 
@@ -676,24 +613,23 @@ private fun scannerResult(
     lookupMessage: String,
 ): Pair<String, Color> = when {
     !hasCode ->
-        "Umieść numer produktu i wszystkie ceny w ramce." to ScannerMuted
+        "Umieść kod produktu i ceny w ramce." to ScannerMuted
 
     onlineCount == 0 ->
         lookupMessage to ScannerMuted
 
     shelfCount == 0 ->
-        "Produkt znaleziony. Pokaż aparatowi całą cenówkę." to ScannerAmber
+        "Ceny online gotowe. Pokaż całą cenówkę." to ScannerAmber
 
     matchedCount == onlineCount ->
-        "Wszystkie ceny są zgodne." to ScannerGreen
+        "Wszystkie wykryte ceny się zgadzają." to ScannerGreen
 
     matchedCount > 0 ->
-        "Zgodne ceny: $matchedCount z $onlineCount." to ScannerAmber
+        "Część cen się zgadza: $matchedCount z $onlineCount." to ScannerAmber
 
     else ->
-        "Ceny na cenówce nie pasują do strony." to ScannerRed
+        "Ceny na cenówce różnią się od strony." to ScannerRed
 }
-
 
 @Composable
 private fun LiveCameraPreview(
